@@ -361,8 +361,9 @@ cncli status
 cncli start [--resume ID] [--interval 2]      # drain lalu watch; Ctrl+C = sesi tetap open
 cncli live                                    # sesi open saja
 cncli stop [--session ID]
-cncli history
+cncli history [--delete ID]                 # hapus sesi closed; open ditolak
 cncli calculate [spec] [--session ID] [--expense N] [--note T] [--preview|--no-preview]
+                                            # preview default tampil; --no-preview skip
 cncli print [spec] [--session ID] [--expense N] [--note T]   # = calculate + kirim
 cncli edit <server_id> --tunai N --nontunai M [--session ID]
 cncli fill <DAY|N> --tunai N --nontunai M [--session ID]    # mis. 2026-10-16|12
@@ -376,7 +377,8 @@ cncli shutdown --yes [--pin P]                 # tanpa --yes = batal
 cncli meta [--show] [--kasir K] [--id-kasir I] [--cabang C] [--shift S]
 ```
 
-PIN: flag `--pin` atau prompt tersembunyi di TTY (tidak pernah disimpan).
+PIN: flag `--pin` (sekali warning stderr: terlihat di history, prompt lebih aman)
+atau prompt tersembunyi di TTY (tidak pernah disimpan).
 Destruktif butuh konfirmasi ganda. Semua pesan full English, timeout
 LAN 10s / GAS 20s. Alias pendek: `st`→`status`, `conn`→`connect`,
 `hist`→`history`.

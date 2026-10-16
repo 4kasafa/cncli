@@ -5,6 +5,8 @@ Bare `cncli` opens a hacking-tool style interactive menu; flags stay scriptable.
 
 > Status v020: all backends live — store (SQLite) + lan (10s) + gas (20s),
 > 18 commands + interactive menu + `--json`. See [`CLI-FLOW.md`](CLI-FLOW.md) §F.
+> M7: menu wizards execute for real (detail-first resume, PC admin via lan),
+> `history --delete` (closed only), calculate preview default ON, `--pin` warns.
 
 ## Install (Termux)
 

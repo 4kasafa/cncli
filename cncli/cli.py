@@ -27,6 +27,8 @@ def _saved_base():
 
 def _pin(args):
     if getattr(args, "pin", None):
+        print("warning: --pin is visible in shell history, "
+              "prefer the interactive prompt", file=sys.stderr)
         return args.pin
     try:
         if sys.stdin.isatty():
@@ -104,9 +106,27 @@ def _drain(conn, sid, base):
     return True, ""
 
 
+def open_and_watch(conn, sid, base, interval=2):
+    """Drain then poll a session. Ctrl+C stops watch, session stays open."""
+    from cncli import lan, store
+    ok, err = _drain(conn, sid, base)
+    if not ok:
+        print("drain incomplete: %s" % err)
+    try:
+        while True:
+            ok, err = _drain(conn, sid, base)
+            total, cash, noncash = store.session_totals(conn, sid)
+            print("tx total Rp %d (cash Rp %d, non-cash Rp %d)%s"
+                  % (total, cash, noncash,
+                     "" if ok else " -- incomplete: %s" % err))
+            time.sleep(interval or 2)
+    except KeyboardInterrupt:
+        print("watch stopped, session %s still open" % sid)
+    return 0
+
+
 def cmd_start(args):
     from cncli import lan, store
-    del lan
     base = _saved_base()
     if not base:
         print("no PC saved (run `cncli connect <base_url>`)")
@@ -121,27 +141,13 @@ def cmd_start(args):
                             {"status": "open", "closed_at": None})
         sid = args.resume
     else:
-        h = __import__("cncli.lan", fromlist=["health"]).health(base)
+        h = lan.health(base)
         s = store.create_session(conn, base)
         if not h["ok"]:
             store.patch_session(conn, s["id"], {"complete": 0})
         sid = s["id"]
     print("session %s" % sid)
-    ok, err = _drain(conn, sid, base)
-    if not ok:
-        print("drain incomplete: %s" % err)
-    interval = args.interval or 2
-    try:
-        while True:
-            ok, err = _drain(conn, sid, base)
-            total, cash, noncash = store.session_totals(conn, sid)
-            print("tx total Rp %d (cash Rp %d, non-cash Rp %d)%s"
-                  % (total, cash, noncash,
-                     "" if ok else " -- incomplete: %s" % err))
-            time.sleep(interval)
-    except KeyboardInterrupt:
-        print("watch stopped, session %s still open" % sid)
-    return 0
+    return open_and_watch(conn, sid, base, args.interval)
 
 
 def cmd_live(args):
@@ -168,6 +174,18 @@ def cmd_stop(args):
 def cmd_history(args):
     from cncli import store
     conn = store.open_db()
+    if args.delete:
+        s = store.get_session(conn, args.delete)
+        if s is None:
+            print("error: unknown session %s" % args.delete)
+            return 1
+        if s["status"] == "open":
+            print("error: session %s is open (stop it first)"
+                  % args.delete)
+            return 1
+        store.delete_session(conn, args.delete)
+        _out.emit({"deleted": args.delete}, args.json)
+        return 0
     rows = []
     for s in store.list_sessions(conn, 50):
         d = dict(s)
@@ -471,6 +489,8 @@ def build_parser():
     p.add_argument("--session", metavar="ID", help="session id (default active)")
     p.set_defaults(func=cmd_stop)
     p = sub.add_parser("history", help="list all sessions")
+    p.add_argument("--delete", metavar="ID",
+                   help="delete a closed session (no undo, open refused)")
     p.set_defaults(func=cmd_history)
 
     for name, help_text in (
@@ -487,7 +507,7 @@ def build_parser():
         p.add_argument("--no-preview", dest="preview", action="store_false",
                        help="skip receipt preview")
         p.set_defaults(func=cmd_calculate if name == "calculate"
-                       else cmd_print, print=False)
+                       else cmd_print, print=False, preview=True)
     p = sub.add_parser("edit", help="correct a transaction locally")
     p.add_argument("server_id", type=int, help="transaction server id")
     p.add_argument("--tunai", type=int, required=True)

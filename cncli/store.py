@@ -348,6 +348,7 @@ def session_totals(conn=None, session_id=None):
 
 def active_status(db=None):
     """(pc, session) for the TUI banner. Never raises."""
+    conn = None
     try:
         conn = db or open_db()
         s = _open_session(conn)
@@ -357,7 +358,7 @@ def active_status(db=None):
     except Exception:
         return ("--", "--")
     finally:
-        if db is None:
+        if db is None and conn is not None:
             try:
                 conn.close()
             except Exception:

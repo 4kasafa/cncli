@@ -136,34 +136,75 @@ def parse_denoms(spec):
 
 
 def session_wizard():
-    """SESSION: list/select/resume/new/watch/close. Interval default 2s."""
+    """SESSION: list, detail-first resume/new/watch. Interval default 2s."""
     print("-- SESSION (watch interval %ds, Ctrl+C keeps session open) --"
           % WATCH_INTERVAL_S)
     if _store is None:
         print("store backend not wired yet (store milestone).")
-        print("[= cncli ses --new]  or  [= cncli start --resume <id>]")
-        return "00" if _read("type 00 to go back: ") == "00" else None
-    try:
-        sessions = _store.list_sessions()
-    except Exception as exc:
-        print("cannot list sessions: %s" % exc)
         return None
+    conn = _store.open_db()
+    sessions = list(_store.list_sessions(conn, 50))
     if not sessions:
         print("no sessions yet.")
-    else:
-        for i, s in enumerate(sessions, 1):
-            mark = "*" if s.get("active") else " "
-            flag = " !" if not s.get("complete", True) else ""
-            print("[%d]%s %s%s" % (i, mark, s.get("id", "?"), flag))
-    choice = _read("pick number, 'new', or 00 back: ")
+        if _read("open a new one? [y/N]: ").lower() != "y":
+            return None
+        return _wizard_new_session(conn)
+    for i, s in enumerate(sessions, 1):
+        mark = "*" if s["status"] == "open" else " "
+        flag = " !" if not s["complete"] else ""
+        print("[%d]%s %s%s" % (i, mark, s["id"], flag))
+    choice = _read("pick number, 'new', 'del', or 00 back: ")
     if choice == "00":
         return "00"
+    if choice == "new":
+        return _wizard_new_session(conn)
+    if choice in ("del", "delete"):
+        target = _read("session id or number to delete (closed only): ")
+        try:
+            target = sessions[int(target) - 1]["id"]
+        except (ValueError, IndexError):
+            pass
+        doomed = _store.get_session(conn, target)
+        if doomed is None:
+            print("unknown session.")
+            return None
+        if doomed["status"] == "open":
+            print("refused: session is open (stop it first).")
+            return None
+        _store.delete_session(conn, target)
+        print("deleted %s" % target)
+        return None
     try:
-        print("[= cncli start --resume %s --interval %d]"
-              % (choice, WATCH_INTERVAL_S))
-    except Exception:
-        pass
-    return None
+        picked = sessions[int(choice) - 1]
+    except (ValueError, IndexError):
+        print("unknown choice.")
+        return None
+    print("id: %s" % picked["id"])
+    print("pc: %s" % (picked["base_url"] or "--"))
+    print("started: %s | status: %s | tx: %s%s" % (
+        picked["started_at"] or "--", picked["status"],
+        picked["count"] or 0,
+        " | INCOMPLETE" if not picked["complete"] else ""))
+    if _read("resume + watch %s? [y/N]: " % picked["id"]).lower() != "y":
+        return None
+    _store.patch_session(conn, picked["id"],
+                         {"status": "open", "closed_at": None})
+    from cncli.cli import open_and_watch
+    return open_and_watch(conn, picked["id"],
+                          picked["base_url"] or _saved_base(),
+                          WATCH_INTERVAL_S)
+
+
+def _wizard_new_session(conn):
+    base = _saved_base()
+    if not base:
+        base = _read("PC base_url (e.g. http://192.168.1.5:8765): ")
+        if not base:
+            return None
+    s = _store.create_session(conn, base)
+    print("session %s" % s["id"])
+    from cncli.cli import open_and_watch
+    return open_and_watch(conn, s["id"], base, WATCH_INTERVAL_S)
 
 
 def _saved_base():
@@ -260,8 +301,30 @@ def setoran_flow():
     return None
 
 
+def _need_lan():
+    if _lan is None:
+        print("lan backend missing.")
+        return None
+    base = _saved_base()
+    if not base:
+        print("no PC saved (run `cncli connect <base_url>`).")
+        return None
+    return base
+
+
+def _need_pin():
+    try:
+        pin = ask_pin()
+    except KeyboardInterrupt:
+        return None
+    if not pin:
+        print("cancelled: empty PIN.")
+        return None
+    return pin
+
+
 def pc_admin():
-    """PC ADMIN: every PIN via hidden prompt; wipe/shutdown double-typed."""
+    """PC ADMIN: displays run directly; changes ask PIN, wipe/shutdown confirm."""
     items = "\n".join([
         "[1] status",
         "[2] log",
@@ -276,29 +339,81 @@ def pc_admin():
     choice = _read("pc > ")
     if choice == "00":
         return "00"
-    if choice in ("6", "7"):
-        try:
-            pin = ask_pin()
-        except KeyboardInterrupt:
-            return None
-        if not pin:
-            print("cancelled: empty PIN.")
-            return None
-        if choice == "6":
-            if _read("type HAPUS to confirm wipe: ") != "HAPUS":
-                print("cancelled: HAPUS not typed.")
-                return None
-            print("[= cncli wipe] (PIN prompted, never stored)")
-        else:
-            if _read("type YES to shutdown PC: ") != "YES":
-                print("cancelled: YES not typed.")
-                return None
-            print("[= cncli shutdown] (PIN prompted, never stored)")
-        if _lan is None:
-            print("lan backend not wired yet (store milestone); no request sent.")
+    base = _need_lan()
+    if base is None:
         return None
-    if choice in ("1", "2", "3", "4", "5"):
-        print("[= cncli pc ...] (PIN via hidden prompt when needed)")
+    if choice == "1":
+        r = _lan.status_get(base)
+        if not r["ok"]:
+            print("error: %s" % r["error"])
+            return None
+        for key in ("version", "ip", "port", "watcher_enabled",
+                    "count_today"):
+            print("%s: %s" % (key, (r["data"] or {}).get(key, "?")))
+        return None
+    if choice == "2":
+        pin = _need_pin()
+        if pin is None:
+            return None
+        tail = _read("tail lines [200]: ") or "200"
+        r = _lan.log_get(base, pin, tail)
+        if not r["ok"]:
+            print("error: %s" % r.get("error"))
+            return None
+        for line in (r["data"] or {}).get("lines", []):
+            print(line)
+        return None
+    if choice == "3":
+        cur = _lan.watcher_get(base)
+        if cur["ok"]:
+            print("watcher now: %s"
+                  % ("on" if (cur["data"] or {}).get("enabled") else "off"))
+        want = _read("set watcher on or off? [on/off]: ").lower()
+        if want not in ("on", "off"):
+            return None
+        pin = _need_pin()
+        if pin is None:
+            return None
+        r = _lan.watcher_set(base, pin, want == "on")
+        print("watcher: %s" % ("on" if (r.get("data") or {}).get("enabled")
+                               else r.get("error")))
+        return None
+    if choice == "4":
+        port = _read("new PC port: ")
+        pin = _need_pin()
+        if pin is None:
+            return None
+        r = _lan.port_set(base, pin, port)
+        print("port: %s" % ((r.get("data") or {}).get("port")
+                             or r.get("error")))
+        return None
+    if choice == "5":
+        new_pin = _read("new 6-digit PIN: ")
+        pin = _need_pin()
+        if pin is None:
+            return None
+        r = _lan.pin_set(base, pin, new_pin)
+        print("pin change: %s" % ("ok" if r.get("ok") else r.get("error")))
+        return None
+    if choice == "6":
+        pin = _need_pin()
+        if pin is None:
+            return None
+        if _read("type HAPUS to confirm wipe: ") != "HAPUS":
+            print("cancelled: HAPUS not typed.")
+            return None
+        r = _lan.wipe(base, pin, "HAPUS")
+        print("wipe: %s" % ("ok" if r.get("ok") else r.get("error")))
+        return None
+    if choice == "7":
+        pin = _need_pin()
+        if pin is None:
+            return None
+        if _read("type YES to shutdown PC: ") != "YES":
+            print("cancelled: YES not typed.")
+            return None
+        r = _lan.shutdown(base, pin)
+        print("shutdown: %s" % ("ok" if r.get("ok") else r.get("error")))
         return None
     print("unknown choice.")
     return None
