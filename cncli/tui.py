@@ -1,0 +1,291 @@
+"""Interactive menu, hacking-tool style. Stdlib only.
+
+Backend note: session/cash/setoran/pc flows call into cncli.store,
+cncli.lan, cncli.gas when those modules land (store milestone). Until
+then every wizard degrades to guided prompts plus the equivalent
+non-interactive command, never a traceback.
+"""
+
+import getpass
+import os
+import sys
+
+try:
+    from cncli import banner as _banner_mod
+    _BANNER = _banner_mod.BANNER
+except Exception:
+    _BANNER = "CNCLI"
+
+try:
+    from cncli import store as _store
+except Exception:
+    _store = None
+
+try:
+    from cncli import lan as _lan
+except Exception:
+    _lan = None
+
+try:
+    from cncli import gas as _gas
+except Exception:
+    _gas = None
+
+MAIN_MENU = "\n".join([
+    "[01] SESSION   list/select/open/close/watch",
+    "[02] CASH      count + print + fix",
+    "[03] SETORAN   GAS dashboard (5 days)",
+    "[04] PC ADMIN  status/log/watcher/port/pin/wipe/off",
+    "[00] EXIT",
+])
+
+WATCH_INTERVAL_S = 2
+
+
+def supports_color():
+    if os.environ.get("NO_COLOR"):
+        return False
+    try:
+        return sys.stdout.isatty()
+    except Exception:
+        return False
+
+
+def color(text, code="32"):
+    if not supports_color():
+        return text
+    return "\x1b[" + code + "m" + text + "\x1b[0m"
+
+
+def clear_screen():
+    if os.environ.get("CNCLI_NO_CLEAR"):
+        return
+    try:
+        if sys.stdout.isatty():
+            sys.stdout.write("\x1b[2J\x1b[H")
+    except Exception:
+        pass
+
+
+def status_line():
+    pc, ses = "--", "--"
+    if _store is not None:
+        try:
+            pc, ses = _store.active_status()
+        except Exception:
+            pass
+    return "PC: %s | session: %s" % (pc, ses)
+
+
+def print_banner():
+    clear_screen()
+    print(color(_BANNER, "36"))
+    print(color(status_line(), "33"))
+
+
+def _read(prompt):
+    try:
+        return input(prompt).strip()
+    except EOFError:
+        print()
+        return "00"
+    except KeyboardInterrupt:
+        print()
+        raise
+
+
+def prompt_default(label, default=""):
+    hint = " [%s]" % default if default else ""
+    val = _read(label + hint + ": ")
+    return val or default
+
+
+def ask_pin():
+    try:
+        return getpass.getpass("PIN (hidden): ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        raise KeyboardInterrupt
+
+
+def parse_denoms(spec):
+    """Parse '100k*5,50k*2' (also '100000x3', '50 k'). Returns total int."""
+    total = 0
+    spec = (spec or "").lower().replace("rp", "").strip()
+    if not spec:
+        return 0
+    for chunk in spec.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        mult = 1
+        for sep in ("*", "x", "@"):
+            if sep in chunk:
+                left, _, right = chunk.partition(sep)
+                chunk, mult = left.strip(), int(right.strip() or 1)
+                break
+        chunk = chunk.replace(" ", "")
+        if chunk.endswith("k"):
+            face = int(chunk[:-1] or 0) * 1000
+        elif chunk.endswith("jt") or chunk.endswith("m"):
+            face = int(chunk.rstrip("jtm") or 0) * 1000000
+        else:
+            face = int(chunk or 0)
+        total += face * mult
+    return total
+
+
+def session_wizard():
+    """SESSION: list/select/resume/new/watch/close. Interval default 2s."""
+    print("-- SESSION (watch interval %ds, Ctrl+C keeps session open) --"
+          % WATCH_INTERVAL_S)
+    if _store is None:
+        print("store backend not wired yet (store milestone).")
+        print("[= cncli ses --new]  or  [= cncli start --resume <id>]")
+        return "00" if _read("type 00 to go back: ") == "00" else None
+    try:
+        sessions = _store.list_sessions()
+    except Exception as exc:
+        print("cannot list sessions: %s" % exc)
+        return None
+    if not sessions:
+        print("no sessions yet.")
+    else:
+        for i, s in enumerate(sessions, 1):
+            mark = "*" if s.get("active") else " "
+            flag = " !" if not s.get("complete", True) else ""
+            print("[%d]%s %s%s" % (i, mark, s.get("id", "?"), flag))
+    choice = _read("pick number, 'new', or 00 back: ")
+    if choice == "00":
+        return "00"
+    try:
+        print("[= cncli start --resume %s --interval %d]"
+              % (choice, WATCH_INTERVAL_S))
+    except Exception:
+        pass
+    return None
+
+
+def cash_wizard():
+    """CASH: count denominations vs active session, optional print."""
+    print("-- CASH count (e.g. 100k*5,50k*2,10k*10; empty = ask) --")
+    spec = _read("denominations: ")
+    try:
+        total = parse_denoms(spec)
+    except ValueError:
+        print("bad denomination, nothing counted.")
+        return None
+    print("physical total: Rp %d" % total)
+    if _store is not None:
+        try:
+            base = _store.session_totals()
+            print("PC total: Rp %d (cash %d, non-cash %d)"
+                  % (base[0], base[1], base[2]))
+            print("diff: Rp %d" % (total - base[0]))
+        except Exception as exc:
+            print("cannot load session totals: %s" % exc)
+    else:
+        print("session compare needs store backend (store milestone).")
+    if _read("print recap to PC printer? [y/N]: ").lower() == "y":
+        print("[= cncli count '%s' --print]" % spec)
+    else:
+        print("[= cncli count '%s']" % spec)
+    return None
+
+
+def setoran_flow():
+    """SETORAN: auto-login GAS, 5-day dashboard, conflict ask."""
+    print("-- SETORAN (auto login, 5 days, conflict asks local/gas) --")
+    if _gas is None:
+        print("gas backend not wired yet (store milestone).")
+        print("[= cncli setoran]  or  [= cncli setoran --prefer gas]")
+        return None
+    try:
+        _gas.interactive_dashboard()
+    except Exception as exc:
+        print("setoran failed: %s" % exc)
+    return None
+
+
+def pc_admin():
+    """PC ADMIN: every PIN via hidden prompt; wipe/shutdown double-typed."""
+    items = "\n".join([
+        "[1] status",
+        "[2] log",
+        "[3] watcher on/off",
+        "[4] port",
+        "[5] change PIN",
+        "[6] WIPE (destructive)",
+        "[7] shutdown PC",
+        "[00] BACK",
+    ])
+    print(items)
+    choice = _read("pc > ")
+    if choice == "00":
+        return "00"
+    if choice in ("6", "7"):
+        try:
+            pin = ask_pin()
+        except KeyboardInterrupt:
+            return None
+        if not pin:
+            print("cancelled: empty PIN.")
+            return None
+        if choice == "6":
+            if _read("type HAPUS to confirm wipe: ") != "HAPUS":
+                print("cancelled: HAPUS not typed.")
+                return None
+            print("[= cncli wipe] (PIN prompted, never stored)")
+        else:
+            if _read("type YES to shutdown PC: ") != "YES":
+                print("cancelled: YES not typed.")
+                return None
+            print("[= cncli shutdown] (PIN prompted, never stored)")
+        if _lan is None:
+            print("lan backend not wired yet (store milestone); no request sent.")
+        return None
+    if choice in ("1", "2", "3", "4", "5"):
+        print("[= cncli pc ...] (PIN via hidden prompt when needed)")
+        return None
+    print("unknown choice.")
+    return None
+
+
+_ACTIONS = {
+    "01": session_wizard, "1": session_wizard,
+    "02": cash_wizard, "2": cash_wizard,
+    "03": setoran_flow, "3": setoran_flow,
+    "04": pc_admin, "4": pc_admin,
+}
+
+
+def main():
+    """Menu loop. 00 goes back, exit closes cleanly on Ctrl-C."""
+    while True:
+        print_banner()
+        print(MAIN_MENU)
+        try:
+            choice = _read("cncli > ")
+        except KeyboardInterrupt:
+            print("bye.")
+            return 0
+        if choice in ("00", "0", "q", "quit", "exit"):
+            print("bye.")
+            return 0
+        action = _ACTIONS.get(choice)
+        if action is None:
+            print("unknown choice, try 01-04 or 00.")
+            try:
+                _read("press Enter: ")
+            except KeyboardInterrupt:
+                print("bye.")
+                return 0
+            continue
+        try:
+            action()
+        except KeyboardInterrupt:
+            continue
+        try:
+            _read("press Enter to continue: ")
+        except KeyboardInterrupt:
+            continue
