@@ -465,6 +465,8 @@ def build_parser():
         description="CNcli v%s: Termux CLI for CNdesktop LAN + GAS setoran. "
                     "No args on a TTY opens the interactive menu." % __version__,
     )
+    parser.add_argument("-v", "--version", action="version",
+                        version="cncli " + __version__)
     parser.add_argument("--json", action="store_true",
                         help="machine-readable JSON output")
     sub = parser.add_subparsers(dest="cmd", metavar="<command>")

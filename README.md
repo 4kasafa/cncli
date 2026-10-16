@@ -35,6 +35,7 @@ cncli menu               # same menu, explicit
 cncli connect http://192.168.1.5:8765   # save PC address (one WiFi, port 8765)
 cncli status             # check PC health (needs connect first)
 cncli --help             # all commands
+cncli -v                 # install check (prints version)
 ```
 
 Menu map (all inside `cncli`):

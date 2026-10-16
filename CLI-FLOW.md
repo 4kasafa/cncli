@@ -350,7 +350,8 @@ ALIASES = {
 
 ## F. Command reference (v020, authoritative)
 
-Global: `--json` di mana saja (sebelum/sesudah subcommand). ID sesi format
+Global: `--json` di mana saja (sebelum/sesudah subcommand). `cncli -v|--version`
+cetak versi + exit 0 di mana saja. ID sesi format
 `YYYY-MM-DD_N`. Tanpa sesi open, command sesi menolak dengan
 `no open session (use --session ID)`.
 
