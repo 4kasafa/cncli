@@ -508,32 +508,68 @@ def run_textual():
     except Exception:
         foot = "00 back - q stop - Ctrl+C exit"
 
-    class MenuScreen(Screen):
+    class HelpScreen(Screen):
+        BINDINGS = [("q", "pop_screen", "Back"), ("escape", "pop_screen", "Back")]
+
         def compose(self) -> ComposeResult:
-            yield Static(banner_text, markup=use_markup)
-            yield Static(status_line())
-            yield Button("[01] SESSION  list/select/open/close/watch",
-                         id="m-ses")
-            yield Button("[02] CASH  count + print + fix", id="m-cash")
-            yield Button("[03] SETORAN  GAS dashboard (5 days)", id="m-set")
-            yield Button("[04] PC ADMIN  status/log/watcher/port/pin/wipe/off",
-                         id="m-pc")
-            yield Button("[00] EXIT", id="m-exit")
-            yield Static(foot)
+            with Vertical(id="wrap"):
+                yield Static("keys", classes="dim")
+                yield Static("1-4 menu - arrows/j/k move - Enter pick\n"
+                             "q stop/back - Esc back - ? help - Ctrl+C quit")
+                yield Button("BACK", id="h-back", flat=True)
             yield Footer()
 
         def on_button_pressed(self, ev):
-            bid = (ev.button.id or "")
-            if bid == "m-exit":
-                self.app.exit(0)
-            elif bid == "m-ses":
-                self.app.push_screen(SesScreen())
-            elif bid == "m-cash":
-                self.app.push_screen(CashScreen())
-            elif bid == "m-set":
-                self.app.push_screen(SetoranScreen())
-            elif bid == "m-pc":
-                self.app.push_screen(PcScreen())
+            self.app.pop_screen()
+
+    class MenuScreen(Screen):
+        BINDINGS = [("1", "go_ses", "Session"), ("2", "go_cash", "Cash"),
+                    ("3", "go_set", "Setoran"), ("4", "go_pc", "PC"),
+                    ("0", "go_exit", "Exit")]
+
+        def compose(self) -> ComposeResult:
+            with Vertical(id="wrap"):
+                yield Static(banner_text, markup=use_markup)
+                yield Static(status_line(), classes="dim")
+                yield ListView(
+                    ListItem(Static("[01] SESSION  sessions, watch 2s")),
+                    ListItem(Static("[02] CASH  stepper, live diff, print")),
+                    ListItem(Static("[03] SETORAN  GAS, cache first")),
+                    ListItem(Static("[04] PC ADMIN  one door, PIN hidden")),
+                    ListItem(Static("[00] EXIT")),
+                    id="m-list")
+                yield Static(foot, classes="dim")
+            yield Footer()
+
+        def _go(self, idx):
+            [lambda: self.app.push_screen(SesScreen()),
+             lambda: self.app.push_screen(CashScreen()),
+             lambda: self.app.push_screen(SetoranScreen()),
+             lambda: self.app.push_screen(PcScreen()),
+             lambda: self.app.exit(0)][idx]()
+
+        def on_list_view_selected(self, ev):
+            try:
+                idx = self.query_one("#m-list", ListView).index
+            except Exception:
+                return
+            if idx is not None and 0 <= idx <= 4:
+                self._go(idx)
+
+        def action_go_ses(self):
+            self._go(0)
+
+        def action_go_cash(self):
+            self._go(1)
+
+        def action_go_set(self):
+            self._go(2)
+
+        def action_go_pc(self):
+            self._go(3)
+
+        def action_go_exit(self):
+            self._go(4)
 
     class SesScreen(Screen):
         BINDINGS = [("q", "pop_screen", "Back"), ("escape", "pop_screen", "Back")]
@@ -1181,8 +1217,26 @@ def run_textual():
                 self.query_one("#p-load", LoadingIndicator).display = False
 
     class CncliApp(App):
-        CSS = "Screen { align: center top; } Button { width: 100%; }"
-        BINDINGS = [("q", "quit_action", "Quit")]
+        # ponytail: flat modern, no 3D buttons; tap-friendly rows + keys.
+        CSS = """
+        Screen { align: center top; background: $background; }
+        #wrap { width: 60; max-width: 60; }
+        .dim { color: $text-muted; }
+        Button { border: none; min-width: 0; width: 100%; height: 3;
+                 background: $surface; color: $text; }
+        Button:hover { background: $primary; }
+        Button:focus { background: $accent; color: $background;
+                       text-style: bold; }
+        Button.-style-flat { border: none; }
+        Button.-style-default { border: none; }
+        ListView { border: none; background: $background; }
+        ListItem { padding: 0 1; }
+        ListItem:focus { background: $accent; color: $background; }
+        Input:focus { border: tall $accent; }
+        LoadingIndicator { color: $accent; }
+        """
+        BINDINGS = [("q", "quit_action", "Quit"),
+                    ("question_mark", "app_help", "Help")]
 
         def on_mount(self):
             self.push_screen(MenuScreen())
@@ -1198,6 +1252,12 @@ def run_textual():
                     self.exit(0)
             except Exception:
                 self.exit(0)
+
+        def action_app_help(self):
+            try:
+                self.push_screen(HelpScreen())
+            except Exception:
+                pass
 
     CncliApp().run()
     return 0
