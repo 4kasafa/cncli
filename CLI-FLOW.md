@@ -382,4 +382,33 @@ PIN: flag `--pin` (sekali warning stderr: terlihat di history, prompt lebih aman
 atau prompt tersembunyi di TTY (tidak pernah disimpan).
 Destruktif butuh konfirmasi ganda. Semua pesan full English, timeout
 LAN 10s / GAS 20s. Alias pendek: `st`→`status`, `conn`→`connect`,
-`hist`→`history`.
+`hist`→`ses --all`.
+
+---
+
+## G. Full-TUI v030 (8 commands + Textual, authoritative)
+
+Core harian: `connect, status, ses, watch, count, fix, setoran, pc`.
+18 nama lama tetap jalan sebagai alias tersembunyi
+(`start/live/history/calculate/print/edit/fill/watcher/log/port/pin/wipe/shutdown`
++ `st/conn/hist`). `meta` + `setoran --save-login` tetap pisah.
+
+```text
+cncli ses [--open|--all|--new|--close|--watch|--resume ID|--delete ID|--session ID]
+cncli watch [--session ID] [--interval 2] [--once]   # q berhenti, sesi tetap open
+cncli count [spec] [--session ID] [--expense N] [--note T] [--print] [--preview|--no-preview]
+cncli fix <id|DAY|N> --tunai N --nontunai M [--session ID]  # ada=edit, hilang=fill hari ini
+cncli pc <status|log|watcher|port|pin|wipe|off> [value] [--on|--off] [--tail N]
+       [--set PORT] [--new PIN] [--confirm HAPUS] [--yes] [--pin P]
+```
+
+TUI (`cncli`, TTY only): banner block opencode dua-tone + bayangan
+(`banner.py: BANNER_FULL_MARKUP`), responsif FULL≥40/COMPACT 30-39/PLAIN<30,
+`NO_COLOR`/`CNCLI_NO_CLEAR`/pipe/`--json` → plain tanpa clear/warna.
+Header banner + `PC/session` + `FOOTER_HINT`
+(`01-04 select - 00 back - q stop - arrows+Enter - Ctrl+C exit`).
+Layar: 01 SES (satu daftar `*`/`!`, angka resume+watch),
+02 CASH stepper 11 denom satu per layar + total live + Back tanpa hapus +
+`Preview/Send/Clear` + struk 32-kolom, 03 SETORAN cache-dulu sync-belakang
+(status SYNC/CONF/ERR/OK, offline baca cache, sheet lokal/gas/tutup non-blokir),
+04 PC satu pintu (PIN hidden, HAPUS/YES ganda), loader di semua fetch.

@@ -9,7 +9,20 @@ import time
 from cncli import __version__
 from cncli import out as _out
 
-ALIASES = {"st": ["status"], "conn": ["connect"], "hist": ["history"]}
+ALIASES = {
+    "st": ["status"], "conn": ["connect"], "hist": ["ses", "--all"],
+    # ponytail: 18-plan names stay as hidden aliases to the 8-command core.
+    "start": ["ses", "--new", "--watch"],
+    "live": ["ses", "--open"],
+    "history": ["ses", "--all"],
+    "calculate": ["count"],
+    "print": ["count", "--print"],
+    "edit": ["fix"], "fill": ["fix"],
+    "watcher": ["pc", "watcher"], "log": ["pc", "log"],
+    "port": ["pc", "port"], "pin": ["pc", "pin"],
+    "wipe": ["pc", "wipe"], "shutdown": ["pc", "off"],
+    "stop": ["ses", "--close"],
+}
 
 
 def _config_path():
@@ -86,6 +99,10 @@ def cmd_status(args):
 
 
 def cmd_menu(args):
+    # ponytail: TUI only on TTY; pipe/json stays plain, never hangs.
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        print("error: menu needs an interactive TTY (pipe detected)")
+        return 2
     from cncli import tui
     del args
     return tui.main()
@@ -122,77 +139,6 @@ def open_and_watch(conn, sid, base, interval=2):
             time.sleep(interval or 2)
     except KeyboardInterrupt:
         print("watch stopped, session %s still open" % sid)
-    return 0
-
-
-def cmd_start(args):
-    from cncli import lan, store
-    base = _saved_base()
-    if not base:
-        print("no PC saved (run `cncli connect <base_url>`)")
-        return 2
-    conn = store.open_db()
-    if args.resume:
-        s = store.get_session(conn, args.resume)
-        if s is None:
-            print("error: unknown session %s" % args.resume)
-            return 1
-        store.patch_session(conn, args.resume,
-                            {"status": "open", "closed_at": None})
-        sid = args.resume
-    else:
-        h = lan.health(base)
-        s = store.create_session(conn, base)
-        if not h["ok"]:
-            store.patch_session(conn, s["id"], {"complete": 0})
-        sid = s["id"]
-    print("session %s" % sid)
-    return open_and_watch(conn, sid, base, args.interval)
-
-
-def cmd_live(args):
-    from cncli import store
-    conn = store.open_db()
-    rows = [dict(s) for s in store.list_sessions(conn, 50)
-            if s["status"] == "open"]
-    _out.emit(rows, args.json)
-    return 0
-
-
-def cmd_stop(args):
-    from cncli import store
-    conn = store.open_db()
-    s = _active_session(conn, args.session)
-    if s is None:
-        print("error: no open session")
-        return 1
-    store.close_session(conn, s["id"], bool(s["complete"]))
-    _out.emit({"closed": s["id"]}, args.json)
-    return 0
-
-
-def cmd_history(args):
-    from cncli import store
-    conn = store.open_db()
-    if args.delete:
-        s = store.get_session(conn, args.delete)
-        if s is None:
-            print("error: unknown session %s" % args.delete)
-            return 1
-        if s["status"] == "open":
-            print("error: session %s is open (stop it first)"
-                  % args.delete)
-            return 1
-        store.delete_session(conn, args.delete)
-        _out.emit({"deleted": args.delete}, args.json)
-        return 0
-    rows = []
-    for s in store.list_sessions(conn, 50):
-        d = dict(s)
-        if not s["complete"]:
-            d["flag"] = "incomplete"
-        rows.append(d)
-    _out.emit(rows, args.json)
     return 0
 
 
@@ -258,52 +204,6 @@ def run_count(args, force_send=False):
     return 0
 
 
-def cmd_calculate(args):
-    args.print = False
-    return run_count(args)
-
-
-def cmd_print(args):
-    args.print = True
-    return run_count(args, force_send=True)
-
-
-def cmd_edit(args):
-    from cncli import store
-    conn = store.open_db()
-    s = _active_session(conn, args.session)
-    if s is None:
-        print("error: no open session (use --session ID)")
-        return 1
-    row = store.patch_tx(conn, s["id"], args.server_id,
-                         args.tunai, args.nontunai)
-    if row is None:
-        print("error: bad id or negative amount")
-        return 1
-    _out.emit(dict(row), args.json)
-    return 0
-
-
-def cmd_fill(args):
-    from cncli import store
-    conn = store.open_db()
-    s = _active_session(conn, args.session)
-    if s is None:
-        print("error: no open session (use --session ID)")
-        return 1
-    if "|" not in (args.key or ""):
-        print('error: key format is DAY|N, e.g. 2026-10-16|12')
-        return 2
-    day, _, num = args.key.rpartition("|")
-    row = store.upsert_fill(conn, s["id"], day, num,
-                            args.tunai, args.nontunai)
-    if row is None:
-        print("error: bad key or negative amount")
-        return 1
-    _out.emit(dict(row), args.json)
-    return 0
-
-
 def cmd_setoran(args):
     from cncli import gas, store
     if args.forget:
@@ -325,122 +225,6 @@ def cmd_setoran(args):
     return gas.interactive_dashboard(prefer=args.prefer)
 
 
-def cmd_watcher(args):
-    from cncli import lan
-    base = _saved_base()
-    if not base:
-        print("no PC saved (run `cncli connect <base_url>`)")
-        return 2
-    if args.on == args.off:
-        r = lan.watcher_get(base)
-        if not r["ok"]:
-            print("error: %s" % r.get("error"))
-            return 1
-        _out.emit(r["data"] or {}, args.json)
-        return 0
-    pin = _pin(args)
-    if pin is None:
-        return 2
-    r = lan.watcher_set(base, pin, bool(args.on))
-    if not r["ok"]:
-        print("error: %s" % r.get("error"))
-        return 1
-    _out.emit(r["data"] or {}, args.json)
-    return 0
-
-
-def cmd_log(args):
-    from cncli import lan
-    base = _saved_base()
-    if not base:
-        print("no PC saved (run `cncli connect <base_url>`)")
-        return 2
-    pin = _pin(args)
-    if pin is None:
-        return 2
-    r = lan.log_get(base, pin, args.tail)
-    if not r["ok"]:
-        print("error: %s" % r.get("error"))
-        return 1
-    data = r["data"] or {}
-    _out.emit(data.get("lines", data), args.json)
-    return 0
-
-
-def cmd_port(args):
-    from cncli import lan
-    base = _saved_base()
-    if not base:
-        print("no PC saved (run `cncli connect <base_url>`)")
-        return 2
-    pin = _pin(args)
-    if pin is None:
-        return 2
-    r = lan.port_set(base, pin, args.set)
-    if not r["ok"]:
-        print("error: %s" % r.get("error"))
-        return 1
-    _out.emit(r["data"] or {}, args.json)
-    return 0
-
-
-def cmd_pin(args):
-    from cncli import lan
-    base = _saved_base()
-    if not base:
-        print("no PC saved (run `cncli connect <base_url>`)")
-        return 2
-    pin = _pin(args)
-    if pin is None:
-        return 2
-    r = lan.pin_set(base, pin, args.new)
-    if not r["ok"]:
-        print("error: %s" % r.get("error"))
-        return 1
-    _out.emit(r["data"] or {}, args.json)
-    return 0
-
-
-def cmd_wipe(args):
-    from cncli import lan
-    base = _saved_base()
-    if not base:
-        print("no PC saved (run `cncli connect <base_url>`)")
-        return 2
-    pin = _pin(args)
-    if pin is None:
-        return 2
-    if args.confirm != "HAPUS":
-        print("error: type --confirm HAPUS to wipe (no undo)")
-        return 2
-    r = lan.wipe(base, pin, args.confirm)
-    if not r["ok"]:
-        print("error: %s" % r.get("error"))
-        return 1
-    _out.emit(r["data"] or {}, args.json)
-    return 0
-
-
-def cmd_shutdown(args):
-    from cncli import lan
-    base = _saved_base()
-    if not base:
-        print("no PC saved (run `cncli connect <base_url>`)")
-        return 2
-    pin = _pin(args)
-    if pin is None:
-        return 2
-    if not args.yes:
-        print("error: pass --yes to shutdown the PC")
-        return 2
-    r = lan.shutdown(base, pin)
-    if not r["ok"]:
-        print("error: %s" % r.get("error"))
-        return 1
-    _out.emit(r["data"] or {}, args.json)
-    return 0
-
-
 def cmd_meta(args):
     from cncli import store
     conn = store.open_db()
@@ -457,6 +241,265 @@ def cmd_meta(args):
         store.set_meta(conn, k, v)
     _out.emit({"saved": sorted(given)}, args.json)
     return 0
+
+
+def _ses_mark(s):
+    mark = "*" if s["status"] == "open" else " "
+    flag = " !" if not s["complete"] else ""
+    return "[%s%s]" % (mark, flag)
+
+
+def cmd_ses(args):
+    """One list for all sessions (open+closed). Numbers picked in TUI."""
+    from cncli import lan, store
+    conn = store.open_db()
+    try:
+        if args.delete:
+            s = store.get_session(conn, args.delete)
+            if s is None:
+                print("error: unknown session %s" % args.delete)
+                return 1
+            if s["status"] == "open":
+                print("error: session %s is open (stop it first)" % args.delete)
+                return 1
+            store.delete_session(conn, args.delete)
+            _out.emit({"deleted": args.delete}, args.json)
+            return 0
+        if args.close:
+            s = _active_session(conn, args.session)
+            if s is None:
+                print("error: no open session")
+                return 1
+            store.close_session(conn, s["id"], bool(s["complete"]))
+            _out.emit({"closed": s["id"]}, args.json)
+            return 0
+        if args.new or args.resume:
+            base = _saved_base()
+            if not base:
+                print("no PC saved (run `cncli connect <base_url>`)")
+                return 2
+            if args.resume:
+                s = store.get_session(conn, args.resume)
+                if s is None:
+                    print("error: unknown session %s" % args.resume)
+                    return 1
+                store.patch_session(conn, args.resume,
+                                    {"status": "open", "closed_at": None})
+                sid = args.resume
+            else:
+                h = lan.health(base)
+                s = store.create_session(conn, base)
+                if not h["ok"]:
+                    store.patch_session(conn, s["id"], {"complete": 0})
+                sid = s["id"]
+            print("session %s" % sid)
+            if args.watch:
+                return open_and_watch(conn, sid, base, args.interval)
+            _out.emit({"opened": sid}, args.json)
+            return 0
+        rows = list(store.list_sessions(conn, 50))
+        if args.open:
+            rows = [s for s in rows if s["status"] == "open"]
+        out = []
+        for s in rows:
+            d = dict(s)
+            if not s["complete"]:
+                d["flag"] = "incomplete"
+            out.append(d)
+        if not args.json:
+            if not rows:
+                print("no sessions yet (cncli ses --new)")
+                return 0
+            for i, s in enumerate(rows, 1):
+                print("[%d]%s %s" % (i, _ses_mark(s), s["id"]))
+            if rows and any(s["status"] == "open" for s in rows):
+                print("*=open !=incomplete")
+            return 0
+        _out.emit(out, True)
+        return 0
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def cmd_watch(args):
+    """Live view of the active session. q/Ctrl+C stops, session stays open."""
+    from cncli import lan, store
+    base = _saved_base()
+    if not base:
+        print("no PC saved (run `cncli connect <base_url>`)")
+        return 2
+    conn = store.open_db()
+    s = _active_session(conn, args.session)
+    if s is None:
+        print("error: no open session (use --session ID)")
+        return 1
+    ok, err = _drain(conn, s["id"], base)
+    total, cash, noncash = store.session_totals(conn, s["id"])
+    tag = "" if ok else " -- incomplete: %s" % err
+    print("tx total Rp %d (cash Rp %d, non-cash Rp %d)%s"
+          % (total, cash, noncash, tag))
+    if args.once:
+        return 0
+    try:
+        while True:
+            time.sleep(args.interval or 2)
+            ok, err = _drain(conn, s["id"], base)
+            total, cash, noncash = store.session_totals(conn, s["id"])
+            tag = "" if ok else " -- incomplete: %s" % err
+            print("tx total Rp %d (cash Rp %d, non-cash Rp %d)%s"
+                  % (total, cash, noncash, tag))
+    except KeyboardInterrupt:
+        print("watch stopped, session %s still open" % s["id"])
+    return 0
+
+
+def cmd_count(args):
+    args.print = bool(getattr(args, "print", False))
+    return run_count(args, force_send=args.print)
+
+
+def cmd_fix(args):
+    """Fix anything: existing id=edit, missing number=fill (active session)."""
+    from cncli import store
+    import datetime
+    conn = store.open_db()
+    s = _active_session(conn, args.session)
+    if s is None:
+        print("error: no open session (use --session ID)")
+        return 1
+    key = (args.key or "").strip()
+    if "|" in key:
+        day, _, num = key.rpartition("|")
+        row = store.upsert_fill(conn, s["id"], day.strip(), num.strip(),
+                                args.tunai, args.nontunai)
+        if row is None:
+            print("error: bad key or negative amount")
+            return 1
+        _out.emit(dict(row), args.json)
+        return 0
+    try:
+        sid = int(key)
+    except (TypeError, ValueError):
+        print("error: key is server id or DAY|N, e.g. 42 or 2026-10-16|12")
+        return 2
+    row = store.patch_tx(conn, s["id"], sid, args.tunai, args.nontunai)
+    if row is not None:
+        _out.emit(dict(row), args.json)
+        return 0
+    day = datetime.date.today().isoformat()
+    row = store.upsert_fill(conn, s["id"], day, sid,
+                            args.tunai, args.nontunai)
+    if row is None:
+        print("error: bad id or negative amount")
+        return 1
+    print("created fill %s|%s" % (day, sid))
+    _out.emit(dict(row), args.json)
+    return 0
+
+
+def cmd_pc(args):
+    """Single door for PC admin. PIN via hidden prompt, never stored."""
+    from cncli import lan
+    base = _saved_base()
+    if not base:
+        print("no PC saved (run `cncli connect <base_url>`)")
+        return 2
+    sub = (args.sub or "").lower()
+    if sub == "status":
+        r = lan.status_get(base)
+        if not r["ok"]:
+            print("error: %s" % r["error"])
+            return 1
+        _out.emit(r["data"] or {}, args.json)
+        return 0
+    if sub == "log":
+        pin = _pin(args)
+        if pin is None:
+            return 2
+        r = lan.log_get(base, pin, args.tail)
+        if not r["ok"]:
+            print("error: %s" % r.get("error"))
+            return 1
+        data = r["data"] or {}
+        _out.emit(data.get("lines", data), args.json)
+        return 0
+    if sub == "watcher":
+        if args.on == args.off:
+            r = lan.watcher_get(base)
+            if not r["ok"]:
+                print("error: %s" % r.get("error"))
+                return 1
+            _out.emit(r["data"] or {}, args.json)
+            return 0
+        pin = _pin(args)
+        if pin is None:
+            return 2
+        r = lan.watcher_set(base, pin, bool(args.on))
+        if not r["ok"]:
+            print("error: %s" % r.get("error"))
+            return 1
+        _out.emit(r["data"] or {}, args.json)
+        return 0
+    if sub == "port":
+        val = args.set if args.set else args.value
+        try:
+            val = int(val)
+        except (TypeError, ValueError):
+            print("error: port required, e.g. cncli pc port 8765")
+            return 2
+        pin = _pin(args)
+        if pin is None:
+            return 2
+        r = lan.port_set(base, pin, val)
+        if not r["ok"]:
+            print("error: %s" % r.get("error"))
+            return 1
+        _out.emit(r["data"] or {}, args.json)
+        return 0
+    if sub == "pin":
+        if not args.new:
+            print("error: --new NEW_PIN required")
+            return 2
+        pin = _pin(args)
+        if pin is None:
+            return 2
+        r = lan.pin_set(base, pin, args.new)
+        if not r["ok"]:
+            print("error: %s" % r.get("error"))
+            return 1
+        _out.emit(r["data"] or {}, args.json)
+        return 0
+    if sub == "wipe":
+        pin = _pin(args)
+        if pin is None:
+            return 2
+        if args.confirm != "HAPUS":
+            print("error: type --confirm HAPUS to wipe (no undo)")
+            return 2
+        r = lan.wipe(base, pin, args.confirm)
+        if not r["ok"]:
+            print("error: %s" % r.get("error"))
+            return 1
+        _out.emit(r["data"] or {}, args.json)
+        return 0
+    if sub == "off":
+        pin = _pin(args)
+        if pin is None:
+            return 2
+        if not args.yes:
+            print("error: pass --yes to shutdown the PC")
+            return 2
+        r = lan.shutdown(base, pin)
+        if not r["ok"]:
+            print("error: %s" % r.get("error"))
+            return 1
+        _out.emit(r["data"] or {}, args.json)
+        return 0
+    print("error: unknown pc target (status/log/watcher/port/pin/wipe/off)")
+    return 2
 
 
 def build_parser():
@@ -479,49 +522,7 @@ def build_parser():
     p.add_argument("base_url", help="PC base URL including port")
     p.set_defaults(func=cmd_connect)
 
-    p = sub.add_parser("start", help="open session and watch live")
-    p.add_argument("--resume", metavar="ID",
-                   help="reopen a closed session instead of a new one")
-    p.add_argument("--interval", type=int, default=2,
-                   help="poll seconds (default 2)")
-    p.set_defaults(func=cmd_start)
-    p = sub.add_parser("live", help="list open sessions")
-    p.set_defaults(func=cmd_live)
-    p = sub.add_parser("stop", help="close the active session")
-    p.add_argument("--session", metavar="ID", help="session id (default active)")
-    p.set_defaults(func=cmd_stop)
-    p = sub.add_parser("history", help="list all sessions")
-    p.add_argument("--delete", metavar="ID",
-                   help="delete a closed session (no undo, open refused)")
-    p.set_defaults(func=cmd_history)
-
-    for name, help_text in (
-            ("calculate", "count drawer denominations vs session"),
-            ("print", "count then send recap to the PC printer")):
-        p = sub.add_parser(name, help=help_text)
-        p.add_argument("spec", nargs="?",
-                       help="e.g. 100k*5,50k*2 (asks when empty on TTY)")
-        p.add_argument("--session", metavar="ID", help="session id (default active)")
-        p.add_argument("--expense", type=int, default=0, help="expense amount")
-        p.add_argument("--note", default="", help="expense note")
-        p.add_argument("--preview", dest="preview", action="store_true",
-                       help="show 32-col receipt preview")
-        p.add_argument("--no-preview", dest="preview", action="store_false",
-                       help="skip receipt preview")
-        p.set_defaults(func=cmd_calculate if name == "calculate"
-                       else cmd_print, print=False, preview=True)
-    p = sub.add_parser("edit", help="correct a transaction locally")
-    p.add_argument("server_id", type=int, help="transaction server id")
-    p.add_argument("--tunai", type=int, required=True)
-    p.add_argument("--nontunai", type=int, required=True)
-    p.add_argument("--session", metavar="ID", help="session id (default active)")
-    p.set_defaults(func=cmd_edit)
-    p = sub.add_parser("fill", help="fill a missing HILANG number locally")
-    p.add_argument("key", help="DAY|N, e.g. 2026-10-16|12")
-    p.add_argument("--tunai", type=int, required=True)
-    p.add_argument("--nontunai", type=int, required=True)
-    p.add_argument("--session", metavar="ID", help="session id (default active)")
-    p.set_defaults(func=cmd_fill)
+    # ponytail: old names run via ALIASES above, no parsers = hidden from help.
 
     p = sub.add_parser("setoran", help="GAS dashboard, auto login")
     p.add_argument("--prefer", choices=("local", "gas"),
@@ -531,33 +532,56 @@ def build_parser():
     p.add_argument("--forget", action="store_true", help="delete stored login")
     p.set_defaults(func=cmd_setoran)
 
-    p = sub.add_parser("watcher", help="show or switch the PC watcher")
-    g = p.add_mutually_exclusive_group()
-    g.add_argument("--on", action="store_true")
-    g.add_argument("--off", action="store_true")
-    p.add_argument("--pin", help="PIN (else hidden prompt on TTY)")
-    p.set_defaults(func=cmd_watcher)
-    p = sub.add_parser("log", help="tail the PC log")
+    # ponytail: 8-command core (human path); 18 old names stay above/below.
+    p = sub.add_parser("ses", help="all sessions, pick number to resume")
+    p.add_argument("--open", action="store_true", help="open sessions only")
+    p.add_argument("--all", action="store_true", help="all sessions")
+    p.add_argument("--new", action="store_true", help="open a new session")
+    p.add_argument("--close", action="store_true", help="close active session")
+    p.add_argument("--watch", action="store_true", help="watch after new/resume")
+    p.add_argument("--resume", metavar="ID", help="reopen a closed session")
+    p.add_argument("--delete", metavar="ID", help="delete a closed session")
+    p.add_argument("--session", metavar="ID", help="session id (default active)")
+    p.add_argument("--interval", type=int, default=2, help="poll seconds")
+    p.set_defaults(func=cmd_ses, open=False, all=False, new=False,
+                   close=False, watch=False, resume=None, delete=None,
+                   session=None, interval=2)
+    p = sub.add_parser("watch", help="live view, q stops, session stays open")
+    p.add_argument("--session", metavar="ID", help="session id (default active)")
+    p.add_argument("--interval", type=int, default=2, help="poll seconds")
+    p.add_argument("--once", action="store_true", help="show once, no poll")
+    p.set_defaults(func=cmd_watch)
+    p = sub.add_parser("count", help="count + optional print in one screen")
+    p.add_argument("spec", nargs="?",
+                   help="e.g. 100k*5,50k*2 (asks when empty on TTY)")
+    p.add_argument("--session", metavar="ID", help="session id (default active)")
+    p.add_argument("--expense", type=int, default=0, help="expense amount")
+    p.add_argument("--note", default="", help="expense note")
+    p.add_argument("--print", dest="print", action="store_true",
+                   help="send recap to PC printer")
+    p.add_argument("--preview", dest="preview", action="store_true",
+                   help="show 32-col receipt preview")
+    p.add_argument("--no-preview", dest="preview", action="store_false",
+                   help="skip receipt preview")
+    p.set_defaults(func=cmd_count, print=False, preview=True)
+    p = sub.add_parser("fix", help="correct anything (edit or fill auto)")
+    p.add_argument("key", help="server id or DAY|N, e.g. 42")
+    p.add_argument("--tunai", type=int, required=True)
+    p.add_argument("--nontunai", type=int, required=True)
+    p.add_argument("--session", metavar="ID", help="session id (default active)")
+    p.set_defaults(func=cmd_fix)
+    p = sub.add_parser("pc", help="all PC admin in one door")
+    p.add_argument("sub", help="status/log/watcher/port/pin/wipe/off")
+    p.add_argument("value", nargs="?", help="port number for port sub")
+    p.add_argument("--on", action="store_true")
+    p.add_argument("--off", action="store_true")
     p.add_argument("--tail", type=int, default=200)
+    p.add_argument("--set", type=int, default=0, metavar="PORT")
+    p.add_argument("--new", default="", metavar="NEW_PIN")
+    p.add_argument("--confirm", default="")
+    p.add_argument("--yes", action="store_true")
     p.add_argument("--pin", help="PIN (else hidden prompt on TTY)")
-    p.set_defaults(func=cmd_log)
-    p = sub.add_parser("port", help="change the PC port")
-    p.add_argument("--set", type=int, required=True, metavar="PORT")
-    p.add_argument("--pin", help="PIN (else hidden prompt on TTY)")
-    p.set_defaults(func=cmd_port)
-    p = sub.add_parser("pin", help="change the PC PIN")
-    p.add_argument("--new", required=True, metavar="NEW_PIN")
-    p.add_argument("--pin", help="current PIN (else hidden prompt on TTY)")
-    p.set_defaults(func=cmd_pin)
-    p = sub.add_parser("wipe", help="wipe PC data (no undo)")
-    p.add_argument("--confirm", default="",
-                   help="must be exactly HAPUS")
-    p.add_argument("--pin", help="PIN (else hidden prompt on TTY)")
-    p.set_defaults(func=cmd_wipe)
-    p = sub.add_parser("shutdown", help="stop the PC connector")
-    p.add_argument("--yes", action="store_true", help="required confirmation")
-    p.add_argument("--pin", help="PIN (else hidden prompt on TTY)")
-    p.set_defaults(func=cmd_shutdown)
+    p.set_defaults(func=cmd_pc)
 
     p = sub.add_parser("meta", help="stored shop details for print")
     p.add_argument("--show", action="store_true")

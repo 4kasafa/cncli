@@ -1,12 +1,12 @@
 # cncli
 
-Termux-first CLI for **CNdesktop LAN + GAS setoran**. Stdlib only (no heavy deps).
-Bare `cncli` opens a hacking-tool style interactive menu; flags stay scriptable.
+Termux-first CLI for **CNdesktop LAN + GAS setoran**. Textual full-TUI
+(opencode-style block banner) with plain fallback for pipe/`--json`.
+Bare `cncli` opens the interactive menu on a TTY; flags stay scriptable.
 
-> Status v020: all backends live — store (SQLite) + lan (10s) + gas (20s),
-> 18 commands + interactive menu + `--json`. See [`CLI-FLOW.md`](CLI-FLOW.md) §F.
-> M7: menu wizards execute for real (detail-first resume, PC admin via lan),
-> `history --delete` (closed only), calculate preview default ON, `--pin` warns.
+> Status v030: 8 commands (`connect/status/ses/watch/count/fix/setoran/pc`)
+> + 18 old names as hidden aliases + Textual TUI + `--json`.
+> See [`CLI-FLOW.md`](CLI-FLOW.md) §F-§G.
 
 ## Install (Termux)
 
@@ -30,11 +30,17 @@ python -m cncli --help
 ## Usage
 
 ```text
-cncli                    # interactive banner + menu (TTY only)
-cncli menu               # same menu, explicit
+cncli                    # full-TUI banner + menu (TTY only)
+cncli menu               # same menu, explicit (TTY only)
 cncli connect http://192.168.1.5:8765   # save PC address (one WiFi, port 8765)
 cncli status             # check PC health (needs connect first)
-cncli --help             # all commands
+cncli ses                # all sessions (*=open !=incomplete, --new/--close)
+cncli watch --once       # live view once (default polls 2s, q stops)
+cncli count 100k*5,50k*2 --print  # stepper in TUI, one-shot in CLI
+cncli fix 42 --tunai 50000 --nontunai 0  # edit id or fill missing number
+cncli setoran            # GAS dashboard cache-first, conflict local/gas
+cncli pc status          # all PC admin behind one door
+cncli --help             # all commands (8 + hidden aliases)
 cncli -v                 # install check (prints version)
 ```
 
@@ -42,11 +48,11 @@ Menu map (all inside `cncli`):
 
 | Key | Group | Does |
 |-----|-------|------|
-| 01 | SESSION | list/select/open/close/watch sessions (2s poll) |
-| 02 | CASH | count denominations (`100k*5,50k*2`), diff vs PC, optional print |
-| 03 | SETORAN | GAS dashboard, 5 days, conflict asks local/gas |
-| 04 | PC ADMIN | status/log/watcher/port/pin/wipe/off |
-| 00 | EXIT | back one level / quit (`Ctrl+C` also quits) |
+| 01 | SESSION | ses list (*=open), number resumes+watch, new/close inline |
+| 02 | CASH | stepper per denom (Back keeps input), live diff, preview 32-col, send |
+| 03 | SETORAN | cache-first auto sync, offline banner, conflict local/gas sheet |
+| 04 | PC ADMIN | pc status/log/watcher/port/pin/wipe/off, loaders everywhere |
+| 00 | EXIT | back one level / quit (`q` stops watch, `Ctrl+C` also quits) |
 
 Rules: `00` goes back. PIN is always via hidden prompt, never `--pin`
 (keeps it out of shell history). `WIPE` needs typed `HAPUS`,

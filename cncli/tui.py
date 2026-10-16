@@ -1,19 +1,19 @@
-"""Interactive menu, hacking-tool style. Stdlib only.
+"""Interactive menu, opencode-style Textual TUI with plain fallback.
 
-Backend note: session/cash/setoran/pc flows call into cncli.store,
-cncli.lan, cncli.gas when those modules land (store milestone). Until
-then every wizard degrades to guided prompts plus the equivalent
-non-interactive command, never a traceback.
+Full-TUI runs on a TTY when textual is installed; pipe/--json/NO_COLOR
+and narrow screens fall back to plain prompts. Never traceback.
 """
 
 import getpass
 import os
+import shutil
 import sys
 
 try:
     from cncli import banner as _banner_mod
     _BANNER = _banner_mod.BANNER
 except Exception:
+    _banner_mod = None
     _BANNER = "CNCLI"
 
 try:
@@ -79,8 +79,38 @@ def status_line():
 
 def print_banner():
     clear_screen()
-    print(color(_BANNER, "36"))
+    text = _BANNER
+    if _banner_mod is not None:
+        try:
+            w = shutil.get_terminal_size((80, 24)).columns
+        except Exception:
+            w = 80
+        no_color = bool(os.environ.get("NO_COLOR")) or not supports_color()
+        try:
+            if w < 40 or no_color:
+                text = _banner_mod.BANNER_COMPACT if w >= 30 else _banner_mod.BANNER_PLAIN
+            else:
+                text = _banner_mod.BANNER_FULL_RAW
+        except Exception:
+            text = _BANNER
+    try:
+        print(color(text, "36"))
+    except UnicodeEncodeError:
+        # ponytail: old Windows console can't encode block chars, plain fallback
+        try:
+            text = _banner_mod.BANNER_COMPACT
+        except Exception:
+            text = _BANNER
+        try:
+            print(text)
+        except UnicodeEncodeError:
+            print("CNCLI")
     print(color(status_line(), "33"))
+    try:
+        hint = _banner_mod.FOOTER_HINT
+    except Exception:
+        hint = "00 back"
+    print(color(hint, "32"))
 
 
 def _read(prompt):
@@ -419,6 +449,760 @@ def pc_admin():
     return None
 
 
+# ---------------------------------------------------------------------------
+# Textual full-TUI (opencode-style). Plain prompts above stay as fallback.
+# ponytail: one App + simple screens, backends reused, never traceback.
+# ---------------------------------------------------------------------------
+
+def _rp(v):
+    try:
+        n = int(float(v or 0))
+    except (TypeError, ValueError):
+        n = 0
+    s = "%d" % abs(n)
+    parts = []
+    while len(s) > 3:
+        parts.insert(0, s[-3:])
+        s = s[:-3]
+    parts.insert(0, s)
+    return ("Rp -" if n < 0 else "Rp ") + ".".join(parts)
+
+
+def _banner_textual():
+    raw, markup = "CNCLI", False
+    if _banner_mod is not None:
+        try:
+            w = shutil.get_terminal_size((80, 24)).columns
+        except Exception:
+            w = 80
+        try:
+            raw, markup = _banner_mod.pick_banner(
+                w, bool(os.environ.get("NO_COLOR")))
+        except Exception:
+            raw, markup = _BANNER, False
+    return (raw, markup)
+
+
+def _textual_available():
+    try:
+        import textual  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+def run_textual():
+    """Run the full-TUI. Returns exit code. Raises on failure (fallback)."""
+    import asyncio
+
+    from textual.app import App, ComposeResult
+    from textual.containers import Vertical
+    from textual.screen import Screen
+    from textual.widgets import (
+        Button, Footer, Input, ListItem, ListView, LoadingIndicator, Static,
+    )
+
+    banner_text, use_markup = _banner_textual()
+    try:
+        foot = _banner_mod.FOOTER_HINT
+    except Exception:
+        foot = "00 back - q stop - Ctrl+C exit"
+
+    class MenuScreen(Screen):
+        def compose(self) -> ComposeResult:
+            yield Static(banner_text, markup=use_markup)
+            yield Static(status_line())
+            yield Button("[01] SESSION  list/select/open/close/watch",
+                         id="m-ses")
+            yield Button("[02] CASH  count + print + fix", id="m-cash")
+            yield Button("[03] SETORAN  GAS dashboard (5 days)", id="m-set")
+            yield Button("[04] PC ADMIN  status/log/watcher/port/pin/wipe/off",
+                         id="m-pc")
+            yield Button("[00] EXIT", id="m-exit")
+            yield Static(foot)
+            yield Footer()
+
+        def on_button_pressed(self, ev):
+            bid = (ev.button.id or "")
+            if bid == "m-exit":
+                self.app.exit(0)
+            elif bid == "m-ses":
+                self.app.push_screen(SesScreen())
+            elif bid == "m-cash":
+                self.app.push_screen(CashScreen())
+            elif bid == "m-set":
+                self.app.push_screen(SetoranScreen())
+            elif bid == "m-pc":
+                self.app.push_screen(PcScreen())
+
+    class SesScreen(Screen):
+        BINDINGS = [("q", "pop_screen", "Back"), ("escape", "pop_screen", "Back")]
+
+        def compose(self) -> ComposeResult:
+            yield Static("-- SESSION (*=open !=incomplete, pick number) --")
+            yield ListView(id="ses-list")
+            yield LoadingIndicator(id="ses-load")
+            yield Static("", id="ses-msg")
+            yield Button("New session", id="s-new")
+            yield Button("Close active", id="s-close")
+            yield Button("Refresh", id="s-ref")
+            yield Button("[00] BACK", id="s-back")
+            yield Footer()
+
+        def on_mount(self):
+            self.query_one("#ses-load", LoadingIndicator).display = False
+            self.refresh_list()
+
+        def refresh_list(self):
+            lv = self.query_one("#ses-list", ListView)
+            lv.clear()
+            self._rows = []
+            if _store is None:
+                self.query_one("#ses-msg", Static).update("store missing")
+                return
+            try:
+                conn = _store.open_db()
+                try:
+                    rows = list(_store.list_sessions(conn, 50))
+                finally:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+            except Exception as exc:
+                self.query_one("#ses-msg", Static).update("load: %s" % exc)
+                return
+            self._rows = rows
+            for i, s in enumerate(rows, 1):
+                try:
+                    mark = "*" if s["status"] == "open" else " "
+                    flag = " !" if not s["complete"] else ""
+                    lv.append(ListItem(Static("[%d]%s %s%s" % (
+                        i, mark, s["id"], flag))))
+                except Exception:
+                    continue
+            if not rows:
+                self.query_one("#ses-msg", Static).update("no sessions yet")
+
+        def on_button_pressed(self, ev):
+            bid = ev.button.id or ""
+            if bid == "s-back":
+                self.app.pop_screen()
+            elif bid == "s-ref":
+                self.refresh_list()
+            elif bid == "s-new":
+                self.new_session()
+            elif bid == "s-close":
+                self.close_active()
+
+        def new_session(self):
+            if _store is None:
+                return
+            base = _saved_base()
+            if not base:
+                self.query_one("#ses-msg", Static).update(
+                    "run cncli connect <base_url> first")
+                return
+            try:
+                conn = _store.open_db()
+                s = _store.create_session(conn, base)
+                sid = s["id"]
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            except Exception as exc:
+                self.query_one("#ses-msg", Static).update("new: %s" % exc)
+                return
+            self.app.push_screen(WatchScreen(sid, base))
+
+        def close_active(self):
+            if _store is None:
+                return
+            try:
+                conn = _store.open_db()
+                try:
+                    rows = list(_store.list_sessions(conn, 50))
+                    act = next((r for r in rows if r["status"] == "open"), None)
+                    if act is None:
+                        self.query_one("#ses-msg", Static).update("no open session")
+                        return
+                    _store.close_session(conn, act["id"], bool(act["complete"]))
+                    self.query_one("#ses-msg", Static).update("closed %s" % act["id"])
+                finally:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+            except Exception as exc:
+                self.query_one("#ses-msg", Static).update("close: %s" % exc)
+                return
+            self.refresh_list()
+
+        def on_list_view_selected(self, ev):
+            try:
+                idx = self.query_one("#ses-list", ListView).index
+            except Exception:
+                return
+            try:
+                picked = self._rows[idx]
+            except Exception:
+                return
+            base = picked["base_url"] or _saved_base()
+            if _store is not None:
+                try:
+                    conn = _store.open_db()
+                    try:
+                        _store.patch_session(conn, picked["id"],
+                                             {"status": "open", "closed_at": None})
+                    finally:
+                        try:
+                            conn.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+            self.app.push_screen(WatchScreen(picked["id"], base))
+
+    class WatchScreen(Screen):
+        BINDINGS = [("q", "pop_screen", "Stop"), ("escape", "pop_screen", "Stop")]
+
+        def __init__(self, sid, base, interval=2):
+            super().__init__()
+            self.sid = sid
+            self.base = base
+            self.interval = interval or 2
+            self._timer = None
+
+        def compose(self) -> ComposeResult:
+            yield Static("-- WATCH %s (q stops, session stays open) --" % self.sid)
+            yield LoadingIndicator(id="w-load")
+            yield Static("contacting PC...", id="w-tot")
+            yield Button("Stop (session stays open)", id="w-stop")
+            yield Footer()
+
+        def on_mount(self):
+            self.run_worker(self._poll(True))
+
+        def on_unmount(self):
+            try:
+                if self._timer is not None:
+                    self._timer.stop()
+            except Exception:
+                pass
+
+        async def _poll(self, first=False):
+            if _store is None or _lan is None:
+                self.query_one("#w-tot", Static).update("backend missing")
+                self.query_one("#w-load", LoadingIndicator).display = False
+                return
+            try:
+                conn = _store.open_db()
+            except Exception as exc:
+                self.query_one("#w-tot", Static).update("db: %s" % exc)
+                self.query_one("#w-load", LoadingIndicator).display = False
+                return
+            try:
+                from cncli.cli import _drain
+                ok, err = await asyncio.to_thread(_drain, conn, self.sid, self.base)
+                total, cash, noncash = _store.session_totals(conn, self.sid)
+                tag = "" if ok else " -- incomplete: %s" % err
+                self.query_one("#w-tot", Static).update(
+                    "tx total %s (cash %s, non-cash %s)%s" % (
+                        _rp(total), _rp(cash), _rp(noncash), tag))
+            except Exception as exc:
+                try:
+                    self.query_one("#w-tot", Static).update("watch: %s" % exc)
+                except Exception:
+                    pass
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            self.query_one("#w-load", LoadingIndicator).display = False
+            if first:
+                try:
+                    self._timer = self.set_interval(self.interval, self._tick)
+                except Exception:
+                    pass
+
+        async def _tick(self):
+            await self._poll(False)
+
+        def on_button_pressed(self, ev):
+            self.app.pop_screen()
+
+    class CashScreen(Screen):
+        BINDINGS = [("q", "pop_screen", "Back"), ("escape", "pop_screen", "Back")]
+
+        def __init__(self):
+            super().__init__()
+            self.qty = {}
+            self.idx = 0
+            try:
+                from cncli import cash as _c
+                self.denoms = list(_c.DENOMS)
+            except Exception:
+                self.denoms = [100000, 50000, 20000, 10000, 5000, 2000, 1000]
+
+        def compose(self) -> ComposeResult:
+            yield Static("-- CASH stepper (Back keeps inputs, Clear wipes) --")
+            yield Static("", id="c-live")
+            yield Static("", id="c-denom")
+            yield Static("", id="c-sub")
+            yield Input(placeholder="qty, e.g. 5", id="c-qty")
+            yield LoadingIndicator(id="c-load")
+            yield Static("", id="c-msg")
+            yield Button("Back", id="c-back")
+            yield Button("Next", id="c-next")
+            yield Button("Preview", id="c-prev")
+            yield Button("Send to printer", id="c-send")
+            yield Button("Clear", id="c-clear")
+            yield Button("[00] BACK", id="c-exit")
+            yield Footer()
+
+        def on_mount(self):
+            self.query_one("#c-load", LoadingIndicator).display = False
+            self.paint()
+
+        def fisik(self):
+            return sum(d * self.qty.get(d, 0) for d in self.denoms)
+
+        def paint(self):
+            try:
+                d = self.denoms[self.idx]
+            except Exception:
+                d = 0
+            q = self.qty.get(d, 0)
+            try:
+                inp = self.query_one("#c-qty", Input)
+                if str(inp.value or "") != str(q if q else ""):
+                    inp.value = str(q if q else "")
+            except Exception:
+                pass
+            self.query_one("#c-sub", Static).update(
+                "%s x %d = %s" % (_rp(d).replace("Rp ", ""), q, _rp(d * q)))
+            self.query_one("#c-denom", Static).update(
+                "denom %d/%d: %s" % (self.idx + 1, len(self.denoms), _rp(d)))
+            self.live_totals()
+
+        def live_totals(self):
+            pc_cash = pc_non = 0
+            if _store is not None:
+                try:
+                    _, pc_cash, pc_non = _store.session_totals()
+                except Exception:
+                    pass
+            fisik = self.fisik()
+            self.query_one("#c-live", Static).update(
+                "fisik %s | PC cash %s non %s | diff %s" % (
+                    _rp(fisik), _rp(pc_cash), _rp(pc_non), _rp(fisik - pc_cash)))
+
+        def on_input_changed(self, ev):
+            if (ev.input.id or "") != "c-qty":
+                return
+            try:
+                d = self.denoms[self.idx]
+            except Exception:
+                return
+            raw = "".join(ch for ch in (ev.value or "") if ch.isdigit())
+            try:
+                self.qty[d] = max(0, int(raw or 0))
+                if self.qty[d] == 0:
+                    self.qty.pop(d, None)
+            except Exception:
+                pass
+            self.paint()
+
+        def payload(self):
+            from cncli import cash as _c
+            noncash, meta = 0, {}
+            if _store is not None:
+                try:
+                    _, _, noncash = _store.session_totals()
+                    conn = _store.open_db()
+                    try:
+                        for k in ("kasir", "kasir_id", "cabang", "shift", "size"):
+                            meta[k] = _store.get_meta(conn, k)
+                    finally:
+                        try:
+                            conn.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+            return _c.build_payload(
+                dict(self.qty), kasir=meta.get("kasir", ""),
+                branch=meta.get("cabang", ""), shift=meta.get("shift", ""),
+                user_id=meta.get("kasir_id", "-"), noncash=noncash,
+                size=meta.get("size", "58"), base=_saved_base())
+
+        def on_button_pressed(self, ev):
+            bid = ev.button.id or ""
+            if bid == "c-exit":
+                self.app.pop_screen()
+            elif bid == "c-back":
+                self.idx = (self.idx - 1) % len(self.denoms)
+                self.paint()
+            elif bid == "c-next":
+                self.idx = (self.idx + 1) % len(self.denoms)
+                self.paint()
+            elif bid == "c-clear":
+                self.qty = {}
+                self.idx = 0
+                self.query_one("#c-msg", Static).update("cleared")
+                self.paint()
+            elif bid == "c-prev":
+                self.run_worker(self._preview())
+            elif bid == "c-send":
+                self.run_worker(self._send())
+
+        async def _preview(self):
+            try:
+                from cncli import cash as _c
+                p = await asyncio.to_thread(self.payload)
+                lines = _c.preview_receipt(p, 32)
+                self.query_one("#c-msg", Static).update("\n".join(lines))
+            except Exception as exc:
+                self.query_one("#c-msg", Static).update("preview: %s" % exc)
+
+        async def _send(self):
+            if _lan is None:
+                self.query_one("#c-msg", Static).update("lan missing")
+                return
+            self.query_one("#c-load", LoadingIndicator).display = True
+            try:
+                from cncli import cash as _c
+                p = await asyncio.to_thread(self.payload)
+                err = _c.validate_send(p)
+                if err:
+                    self.query_one("#c-msg", Static).update("cannot print: %s" % err)
+                    return
+                r = await asyncio.to_thread(
+                    _lan.send_print, p["base"], {
+                        k: p[k] for k in ("kasir", "branch", "shift", "user_id",
+                                          "qty", "expense_amount", "expense_note",
+                                          "nontunai_amount", "size")})
+                if r.get("ok"):
+                    self.query_one("#c-msg", Static).update("printed")
+                else:
+                    self.query_one("#c-msg", Static).update("failed: %s" % r.get("error"))
+            except Exception as exc:
+                self.query_one("#c-msg", Static).update("send: %s" % exc)
+            finally:
+                self.query_one("#c-load", LoadingIndicator).display = False
+
+    class ConflictScreen(Screen):
+        def __init__(self, _local=None, gas=None, on_pick=None):
+            super().__init__()
+            self._local = _local or {}
+            self._gas = gas or {}
+            self._cb = on_pick
+
+        def compose(self) -> ComposeResult:
+            yield Static("-- KONFLIK: pick one, Esc dismiss (non-blocking) --")
+            yield Static("lokal: %s" % self._local)
+            yield Static("gas: %s" % self._gas)
+            yield Button("pakai lokal", id="k-lokal")
+            yield Button("pakai gas", id="k-gas")
+            yield Button("tutup", id="k-tutup")
+
+        def on_button_pressed(self, ev):
+            pick = {"k-lokal": "local", "k-gas": "gas"}.get(ev.button.id or "", "close")
+            cb = self._cb
+            self.app.pop_screen()
+            if cb is not None:
+                try:
+                    cb(pick)
+                except Exception:
+                    pass
+
+    class SetoranScreen(Screen):
+        BINDINGS = [("q", "pop_screen", "Back"), ("escape", "pop_screen", "Back")]
+
+        def compose(self) -> ComposeResult:
+            yield Static("-- SETORAN (cache first, background sync) --")
+            yield LoadingIndicator(id="g-load")
+            yield Static("--", id="g-status")
+            yield Static("", id="g-sum")
+            yield ListView(id="g-list")
+            yield Button("Refresh", id="g-ref")
+            yield Button("[00] BACK", id="g-back")
+            yield Footer()
+
+        def on_mount(self):
+            self.paint_cache("loading cache...")
+            self.run_worker(self._sync())
+
+        def paint_cache(self, status):
+            self.query_one("#g-status", Static).update(status)
+            if _store is None:
+                return
+            try:
+                email, _ = _store.load_creds()
+                if not email:
+                    self.query_one("#g-sum", Static).update("no GAS login saved")
+                    return
+                conn = _store.open_db()
+                try:
+                    cached = _store.load_setoran_cache(conn, email)
+                finally:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+                if cached:
+                    self.paint_rows(cached, "OFFLINE: baca cache")
+            except Exception as exc:
+                self.query_one("#g-sum", Static).update("cache: %s" % exc)
+
+        def paint_rows(self, rows, status):
+            from cncli import gas as _g
+            kurang, lebih = _g.summarize(rows)
+            self.query_one("#g-status", Static).update(status)
+            self.query_one("#g-sum", Static).update(
+                "tx %d | short %s | over %s" % (
+                    len(rows), _rp(kurang), _rp(lebih)))
+            lv = self.query_one("#g-list", ListView)
+            lv.clear()
+            for r in (rows or [])[:5]:
+                try:
+                    lv.append(ListItem(Static("- %s | %s | %s" % (
+                        (r or {}).get("tanggal", "?"), (r or {}).get("shift", "?"),
+                        _rp((r or {}).get("jumlahSelisih", 0))))))
+                except Exception:
+                    continue
+
+        def on_button_pressed(self, ev):
+            if (ev.button.id or "") in ("g-back",):
+                self.app.pop_screen()
+            elif (ev.button.id or "") == "g-ref":
+                self.query_one("#g-load", LoadingIndicator).display = True
+                self.run_worker(self._sync())
+
+        async def _sync(self):
+            if _gas is None or _store is None:
+                self.query_one("#g-status", Static).update("backend missing")
+                self.query_one("#g-load", LoadingIndicator).display = False
+                return
+            try:
+                email, pw = await asyncio.to_thread(_store.load_creds)
+                if not email or not pw:
+                    self.query_one("#g-status", Static).update("no GAS login")
+                    self.query_one("#g-load", LoadingIndicator).display = False
+                    return
+                self.query_one("#g-status", Static).update("SYNC...")
+                auth = await asyncio.to_thread(_gas.login, email, pw)
+                if not auth.get("success"):
+                    self.paint_cache("ERR: %s" % auth.get("message"))
+                    self.query_one("#g-load", LoadingIndicator).display = False
+                    return
+                dash = await asyncio.to_thread(
+                    _gas.get_dashboard_data, auth["token"])
+                if not dash.get("success"):
+                    self.paint_cache("ERR: %s" % dash.get("message"))
+                    self.query_one("#g-load", LoadingIndicator).display = False
+                    return
+                rows = dash["data"] or []
+                conn = _store.open_db()
+                try:
+                    cached = _store.load_setoran_cache(conn, email)
+                finally:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+                if cached != rows and cached:
+                    self.paint_rows(cached, "CONF: cache vs GAS differs")
+                    self.query_one("#g-load", LoadingIndicator).display = False
+                    self.app.push_screen(ConflictScreen(
+                        {"rows": len(cached)}, {"rows": len(rows)},
+                        lambda pick: self._resolve(email, rows, pick)))
+                    return
+                conn = _store.open_db()
+                try:
+                    _store.save_setoran_cache(conn, email, rows)
+                finally:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+                self.paint_rows(rows, "OK")
+            except Exception as exc:
+                try:
+                    self.query_one("#g-status", Static).update("ERR: %s" % exc)
+                except Exception:
+                    pass
+            finally:
+                try:
+                    self.query_one("#g-load", LoadingIndicator).display = False
+                except Exception:
+                    pass
+
+        def _resolve(self, email, rows, pick):
+            if pick == "gas":
+                try:
+                    conn = _store.open_db()
+                    try:
+                        _store.save_setoran_cache(conn, email, rows)
+                    finally:
+                        try:
+                            conn.close()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                self.paint_rows(rows, "OK: saved GAS version")
+            elif pick == "local":
+                self.query_one("#g-status", Static).update("OK: kept local cache")
+            else:
+                self.query_one("#g-status", Static).update("dismissed (non-blocking)")
+
+    class PcScreen(Screen):
+        BINDINGS = [("q", "pop_screen", "Back"), ("escape", "pop_screen", "Back")]
+
+        def compose(self) -> ComposeResult:
+            yield Static("-- PC ADMIN (PIN hidden, never stored) --")
+            yield LoadingIndicator(id="p-load")
+            yield Static("", id="p-out")
+            yield Button("1 status", id="p-status")
+            yield Button("2 log", id="p-log")
+            yield Button("3 watcher on/off", id="p-watch")
+            yield Button("4 port", id="p-port")
+            yield Button("5 change PIN", id="p-pin")
+            yield Button("6 WIPE", id="p-wipe")
+            yield Button("7 shutdown", id="p-off")
+            yield Input(placeholder="PIN (hidden)", password=True, id="p-pin-in")
+            yield Input(placeholder="arg: tail/port/new/HAPUS/YES", id="p-arg")
+            yield Button("[00] BACK", id="p-back")
+            yield Footer()
+
+        def on_mount(self):
+            self.query_one("#p-load", LoadingIndicator).display = False
+
+        def _pin_arg(self):
+            try:
+                pin = (self.query_one("#p-pin-in", Input).value or "").strip()
+            except Exception:
+                pin = ""
+            try:
+                arg = (self.query_one("#p-arg", Input).value or "").strip()
+            except Exception:
+                arg = ""
+            return (pin, arg)
+
+        def on_button_pressed(self, ev):
+            bid = ev.button.id or ""
+            if bid == "p-back":
+                self.app.pop_screen()
+            elif bid == "p-status":
+                self.run_worker(self._do("status"))
+            elif bid == "p-log":
+                self.run_worker(self._do("log"))
+            elif bid == "p-watch":
+                self.run_worker(self._do("watcher"))
+            elif bid == "p-port":
+                self.run_worker(self._do("port"))
+            elif bid == "p-pin":
+                self.run_worker(self._do("pin"))
+            elif bid == "p-wipe":
+                self.run_worker(self._do("wipe"))
+            elif bid == "p-off":
+                self.run_worker(self._do("off"))
+
+        async def _do(self, what):
+            if _lan is None:
+                self.query_one("#p-out", Static).update("lan missing")
+                return
+            base = _saved_base()
+            if not base:
+                self.query_one("#p-out", Static).update("run cncli connect first")
+                return
+            pin, arg = self._pin_arg()
+            self.query_one("#p-load", LoadingIndicator).display = True
+            try:
+                if what == "status":
+                    r = await asyncio.to_thread(_lan.status_get, base)
+                    d = r.get("data") or {}
+                    self.query_one("#p-out", Static).update(
+                        "version %s watcher %s today %s" % (
+                            d.get("version", "?"),
+                            d.get("watcher_enabled", "?"), d.get("count_today", "?"))
+                        if r.get("ok") else "error: %s" % r.get("error"))
+                    return
+                if not pin:
+                    self.query_one("#p-out", Static).update("cancelled: empty PIN")
+                    return
+                if what == "log":
+                    try:
+                        tail = int(arg or 200)
+                    except Exception:
+                        tail = 200
+                    r = await asyncio.to_thread(_lan.log_get, base, pin, tail)
+                    lines = ((r.get("data") or {}).get("lines", []) if r.get("ok")
+                             else ["error: %s" % r.get("error")])
+                    self.query_one("#p-out", Static).update("\n".join(lines[-20:]))
+                elif what == "watcher":
+                    cur = await asyncio.to_thread(_lan.watcher_get, base)
+                    want = "off" if ((cur.get("data") or {}).get("enabled")) else "on"
+                    if arg.lower() in ("on", "off"):
+                        want = arg.lower()
+                    r = await asyncio.to_thread(
+                        _lan.watcher_set, base, pin, want == "on")
+                    self.query_one("#p-out", Static).update(
+                        "watcher: %s" % ("on" if (r.get("data") or {}).get("enabled")
+                                         else r.get("error")))
+                elif what == "port":
+                    r = await asyncio.to_thread(_lan.port_set, base, pin, arg)
+                    self.query_one("#p-out", Static).update(
+                        "port: %s" % ((r.get("data") or {}).get("port") or r.get("error")))
+                elif what == "pin":
+                    r = await asyncio.to_thread(_lan.pin_set, base, pin, arg)
+                    self.query_one("#p-out", Static).update(
+                        "pin: %s" % ("ok" if r.get("ok") else r.get("error")))
+                elif what == "wipe":
+                    if arg != "HAPUS":
+                        self.query_one("#p-out", Static).update("type HAPUS in arg box")
+                        return
+                    r = await asyncio.to_thread(_lan.wipe, base, pin, "HAPUS")
+                    self.query_one("#p-out", Static).update(
+                        "wipe: %s" % ("ok" if r.get("ok") else r.get("error")))
+                elif what == "off":
+                    if arg != "YES":
+                        self.query_one("#p-out", Static).update("type YES in arg box")
+                        return
+                    r = await asyncio.to_thread(_lan.shutdown, base, pin)
+                    self.query_one("#p-out", Static).update(
+                        "shutdown: %s" % ("ok" if r.get("ok") else r.get("error")))
+            except Exception as exc:
+                self.query_one("#p-out", Static).update("%s: %s" % (what, exc))
+            finally:
+                self.query_one("#p-load", LoadingIndicator).display = False
+
+    class CncliApp(App):
+        CSS = "Screen { align: center top; } Button { width: 100%; }"
+        BINDINGS = [("q", "quit_action", "Quit")]
+
+        def on_mount(self):
+            self.push_screen(MenuScreen())
+
+        def compose(self) -> ComposeResult:
+            yield Vertical()
+
+        def action_quit_action(self):
+            try:
+                if len(self.screen_stack) > 1:
+                    self.pop_screen()
+                else:
+                    self.exit(0)
+            except Exception:
+                self.exit(0)
+
+    CncliApp().run()
+    return 0
+
+
 _ACTIONS = {
     "01": session_wizard, "1": session_wizard,
     "02": cash_wizard, "2": cash_wizard,
@@ -427,8 +1211,8 @@ _ACTIONS = {
 }
 
 
-def main():
-    """Menu loop. 00 goes back, exit closes cleanly on Ctrl-C."""
+def plain_main():
+    """Plain menu loop (fallback). 00 goes back, exit closes on Ctrl-C."""
     while True:
         print_banner()
         print(MAIN_MENU)
@@ -457,3 +1241,22 @@ def main():
             _read("press Enter to continue: ")
         except KeyboardInterrupt:
             continue
+
+
+def main():
+    """Try full-TUI on TTY with textual, else plain fallback. Never hangs."""
+    try:
+        if sys.stdin.isatty() and sys.stdout.isatty() and _textual_available():
+            try:
+                return run_textual()
+            except Exception as exc:
+                print("tui fallback: %s" % exc)
+    except Exception:
+        pass
+    try:
+        if sys.stdin.isatty():
+            return plain_main()
+    except Exception:
+        pass
+    print("error: menu needs an interactive TTY")
+    return 2
