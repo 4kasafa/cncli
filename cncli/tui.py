@@ -166,30 +166,83 @@ def session_wizard():
     return None
 
 
+def _saved_base():
+    try:
+        with open(os.path.join(os.path.expanduser("~"), ".cncli",
+                               "config"), encoding="utf-8") as fh:
+            return fh.read().strip()
+    except OSError:
+        return ""
+
+
 def cash_wizard():
-    """CASH: count denominations vs active session, optional print."""
+    """CASH: count denominations vs active session, preview, optional send."""
     print("-- CASH count (e.g. 100k*5,50k*2,10k*10; empty = ask) --")
     spec = _read("denominations: ")
     try:
-        total = parse_denoms(spec)
+        from cncli import cash as _cash
+    except Exception:
+        _cash = None
+    if _cash is None:
+        try:
+            total = parse_denoms(spec)
+        except ValueError:
+            print("bad denomination, nothing counted.")
+            return None
+        print("physical total: Rp %d" % total)
+        print("[= cncli count '%s']" % spec)
+        return None
+    try:
+        qty = _cash.qty_from_spec(spec)
     except ValueError:
         print("bad denomination, nothing counted.")
         return None
+    total = sum(d * q for d, q in qty.items())
     print("physical total: Rp %d" % total)
+    noncash, meta = 0, {}
     if _store is not None:
         try:
             base = _store.session_totals()
-            print("PC total: Rp %d (cash %d, non-cash %d)"
-                  % (base[0], base[1], base[2]))
+            print("PC total: Rp %d (cash %d, non-cash %d)" % base)
             print("diff: Rp %d" % (total - base[0]))
+            noncash = base[2]
+            conn = _store.open_db()
+            try:
+                for k in ("kasir", "kasir_id", "cabang", "shift", "size"):
+                    meta[k] = _store.get_meta(conn, k)
+            finally:
+                conn.close()
         except Exception as exc:
             print("cannot load session totals: %s" % exc)
     else:
         print("session compare needs store backend (store milestone).")
-    if _read("print recap to PC printer? [y/N]: ").lower() == "y":
-        print("[= cncli count '%s' --print]" % spec)
-    else:
+    if _read("print recap to PC printer? [y/N]: ").lower() != "y":
         print("[= cncli count '%s']" % spec)
+        return None
+    if _lan is None:
+        print("[= cncli count '%s' --print] (lan backend pending)" % spec)
+        return None
+    payload = _cash.build_payload(
+        qty, kasir=meta.get("kasir", ""), branch=meta.get("cabang", ""),
+        shift=meta.get("shift", ""), user_id=meta.get("kasir_id", "-"),
+        noncash=noncash, size=meta.get("size", "58"), base=_saved_base())
+    err = _cash.validate_send(payload)
+    if err:
+        print("cannot print: %s" % err)
+        return None
+    for line in _cash.preview_receipt(payload):
+        print(line)
+    if _read("send to PC? [y/N]: ").lower() != "y":
+        return None
+    r = _lan.send_print(payload["base"], {
+        k: payload[k] for k in ("kasir", "branch", "shift", "user_id",
+                                "qty", "expense_amount", "expense_note",
+                                "nontunai_amount", "size")})
+    if r.get("ok"):
+        print("printed at %s" % ((r.get("data") or {}).get("printer")
+                                 or "printer"))
+    else:
+        print("failed: %s" % r.get("error"))
     return None
 
 
