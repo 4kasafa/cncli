@@ -3,9 +3,8 @@
 Termux-first CLI for **CNdesktop LAN + GAS setoran**. Stdlib only (no heavy deps).
 Bare `cncli` opens a hacking-tool style interactive menu; flags stay scriptable.
 
-> Status v0.1.0: interactive menu, banner, `connect`, `status` work.
-> Live/GAS sync backends land in the store milestone (`cncli/store.py`,
-> `cncli/lan.py`, `cncli/gas.py`). Wizards degrade gracefully until then.
+> Status v020: all backends live — store (SQLite) + lan (10s) + gas (20s),
+> 18 commands + interactive menu + `--json`. See [`CLI-FLOW.md`](CLI-FLOW.md) §F.
 
 ## Install (Termux)
 

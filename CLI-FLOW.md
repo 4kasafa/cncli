@@ -342,3 +342,41 @@ ALIASES = {
   "meta": ["count", "--setup"],
 }
 ```
+
+> Catatan v020: blok di atas sketsa awal sebelum implementasi.
+> Yang berlaku adalah §F di bawah (18 command + alias pendek `st/conn/hist`).
+
+---
+
+## F. Command reference (v020, authoritative)
+
+Global: `--json` di mana saja (sebelum/sesudah subcommand). ID sesi format
+`YYYY-MM-DD_N`. Tanpa sesi open, command sesi menolak dengan
+`no open session (use --session ID)`.
+
+```text
+cncli [--json] menu
+cncli connect <base_url>                      # simpan, mis. http://192.168.1.5:8765
+cncli status
+cncli start [--resume ID] [--interval 2]      # drain lalu watch; Ctrl+C = sesi tetap open
+cncli live                                    # sesi open saja
+cncli stop [--session ID]
+cncli history
+cncli calculate [spec] [--session ID] [--expense N] [--note T] [--preview|--no-preview]
+cncli print [spec] [--session ID] [--expense N] [--note T]   # = calculate + kirim
+cncli edit <server_id> --tunai N --nontunai M [--session ID]
+cncli fill <DAY|N> --tunai N --nontunai M [--session ID]    # mis. 2026-10-16|12
+cncli setoran [--prefer local|gas] [--save-login] [--forget]
+cncli watcher [--on|--off] [--pin P]          # tanpa flag = tampilkan state
+cncli log [--tail 200] [--pin P]
+cncli port --set PORT [--pin P]
+cncli pin --new NEW_PIN [--pin P]
+cncli wipe --confirm HAPUS [--pin P]           # tanpa HAPUS persis = batal
+cncli shutdown --yes [--pin P]                 # tanpa --yes = batal
+cncli meta [--show] [--kasir K] [--id-kasir I] [--cabang C] [--shift S]
+```
+
+PIN: flag `--pin` atau prompt tersembunyi di TTY (tidak pernah disimpan).
+Destruktif butuh konfirmasi ganda. Semua pesan full English, timeout
+LAN 10s / GAS 20s. Alias pendek: `st`→`status`, `conn`→`connect`,
+`hist`→`history`.
