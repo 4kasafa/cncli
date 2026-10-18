@@ -1,10 +1,10 @@
 [project]
 name = "cncli"
-version = "0.3.0"
-description = "CNcli: Termux CLI for CNdesktop LAN + GAS setoran (interactive menu included)"
+version = "0.4.0"
+description = "CNcli: Termux CLI for CNdesktop LAN + GAS setoran (React TUI included)"
 requires-python = ">=3.9"
 readme = "CLI-FLOW.md"
-dependencies = ["textual>=8.2"]
+dependencies = []
 
 [project.scripts]
 cncli = "cncli.cli:main"

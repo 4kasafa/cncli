@@ -1,29 +1,31 @@
 # cncli
 
-Termux-first CLI for **CNdesktop LAN + GAS setoran**. Textual full-TUI
-(opencode-style block banner) with plain fallback for pipe/`--json`.
-Bare `cncli` opens the interactive menu on a TTY; flags stay scriptable.
+Termux-first CLI for **CNdesktop LAN + GAS setoran**. React OpenTUI menu
+(`tui/`, node/bun) with plain wizard fallback for pipe/`--json` or when the
+TUI runtime is missing. Bare `cncli` opens the menu on a TTY; flags stay scriptable.
 
-> Status v030: 8 commands (`connect/status/ses/watch/count/fix/setoran/pc`)
-> + 18 old names as hidden aliases + Textual TUI + `--json`.
+> Status v040: 8 commands (`connect/status/ses/watch/count/fix/setoran/pc`)
+> + 18 old names as hidden aliases + React TUI + `--json`.
 > See [`CLI-FLOW.md`](CLI-FLOW.md) §F-§G.
 
 ## Install (Termux)
 
 ```sh
-pkg install python git
+pkg install python git nodejs-lts   # node >= 26.4, or: pkg install bun
 git clone https://github.com/4kasafa/cncli && cd cncli
 pip install -e .
+cd tui && npm install && cd ..      # once; bun users run src/ directly
 cncli
 ```
 
-Update later: `cd cncli && git pull`.
+Update later: `cd cncli && git pull`. Node users also run `cd tui && npm run build`.
 
 ## Install (Windows dev)
 
 ```powershell
 git clone https://github.com/4kasafa/cncli; Set-Location cncli
 python -m pip install -e .
+cd tui; npm install; npm run build; cd ..   # or: bun src/index.tsx (dev)
 python -m cncli --help
 ```
 
@@ -44,20 +46,22 @@ cncli --help             # all commands (8 + hidden aliases)
 cncli -v                 # install check (prints version)
 ```
 
-Menu map (all inside `cncli`):
+Menu map (the React TUI inside `cncli`):
 
-| Key | Group | Does |
-|-----|-------|------|
-| 01 | SESSION | ses list (*=open), number resumes+watch, new/close inline |
-| 02 | CASH | stepper per denom (Back keeps input), live diff, preview 32-col, send |
-| 03 | SETORAN | cache-first auto sync, offline banner, conflict local/gas sheet |
-| 04 | PC ADMIN | pc status/log/watcher/port/pin/wipe/off, loaders everywhere |
-| 00 | EXIT | back one level / quit (`q` stops watch, `Ctrl+C` also quits) |
+| Key | View | Does |
+|-----|------|------|
+| 1 / s | setoran | GAS auto-login from saved creds, archive cache-first, conflict sheet local/gas |
+| 2 / l | live | open/close/resume session, pulls tx every 2s, fill HILANG, fix rows, history |
+| 3 / p | print | 11 denominations, expense + note, 58/80 receipt preview, send to PC printer |
+| 4 / c | comp | PC list + live badges, add/edit/delete, watcher/log/wipe control |
+| ? | help | full key reference (`1-4` or `s l p c` switch views) |
 
-Rules: `00` goes back. PIN is always via hidden prompt, never `--pin`
+Plain fallback (no node/bun runtime, or pipe): `01 SESSION` / `02 CASH` /
+`03 SETORAN` / `04 PC ADMIN` wizards with `00` back.
+Rules: PIN is always via hidden prompt, never `--pin`
 (keeps it out of shell history). `WIPE` needs typed `HAPUS`,
 shutdown needs typed `YES`. Data lives in `~/.cncli/`
-(config + SQLite + chmod-600 credentials).
+(config + SQLite + chmod-600 credentials; TUI state under `~/.cncli/tui/`).
 
 ## Examples
 

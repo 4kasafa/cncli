@@ -1,0 +1,23 @@
+{
+  "name": "cncli-tui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "cncli terminal TUI (OpenTUI React). Aliases @androidtui so the same imports work on Termux (android-arm64 .so) and desktop.",
+  "scripts": {
+    "dev": "bun src/index.tsx",
+    "build": "tsc -p .",
+    "start": "node --experimental-ffi dist/index.js",
+    "test": "node --test \"test/*.test.ts\""
+  },
+  "dependencies": {
+    "@opentui/core": "npm:@androidtui/core@0.6.6",
+    "@opentui/react": "npm:@androidtui/react@0.6.6",
+    "react": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "typescript": "^5.9.0"
+  }
+}

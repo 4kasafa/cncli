@@ -386,7 +386,7 @@ LAN 10s / GAS 20s. Alias pendek: `st`→`status`, `conn`→`connect`,
 
 ---
 
-## G. Full-TUI v030 (8 commands + Textual, authoritative)
+## G. Full-TUI v040 (8 commands + React OpenTUI, authoritative)
 
 Core harian: `connect, status, ses, watch, count, fix, setoran, pc`.
 18 nama lama tetap jalan sebagai alias tersembunyi
@@ -402,13 +402,24 @@ cncli pc <status|log|watcher|port|pin|wipe|off> [value] [--on|--off] [--tail N]
        [--set PORT] [--new PIN] [--confirm HAPUS] [--yes] [--pin P]
 ```
 
-TUI (`cncli`, TTY only): banner block opencode dua-tone + bayangan
-(`banner.py: BANNER_FULL_MARKUP`), responsif FULL≥40/COMPACT 30-39/PLAIN<30,
-`NO_COLOR`/`CNCLI_NO_CLEAR`/pipe/`--json` → plain tanpa clear/warna.
-Header banner + `PC/session` + `FOOTER_HINT`
-(`01-04 select - 00 back - q stop - arrows+Enter - Ctrl+C exit`).
-Layar: 01 SES (satu daftar `*`/`!`, angka resume+watch),
-02 CASH stepper 11 denom satu per layar + total live + Back tanpa hapus +
-`Preview/Send/Clear` + struk 32-kolom, 03 SETORAN cache-dulu sync-belakang
-(status SYNC/CONF/ERR/OK, offline baca cache, sheet lokal/gas/tutup non-blokir),
-04 PC satu pintu (PIN hidden, HAPUS/YES ganda), loader di semua fetch.
+TUI (`cncli` / `cncli menu`, TTY only): app React OpenTUI di `tui/`
+(TypeScript + @opentui/react, dipin ke alias `@androidtui` 0.6.6 supaya
+binary Termux ikut terpasang). Launcher `cncli/tui.py` mencoba
+`node --experimental-ffi tui/dist/index.js` lalu `bun tui/src/index.tsx`;
+runtime/build hilang atau keluar non-nol -> fallback wizard plain
+(tidak pernah traceback). Runtime: node >= 26.4 ATAU bun >= 1.3.14.
+Setup sekali: `cd tui && npm install`; jalur node juga `npm run build`.
+
+Empat view (gaya noir, tanpa blink):
+- 1/s setoran  login GAS auto dari creds tersimpan, arsip cache dulu,
+  sheet konflik lokal/gas, login/logout akun.
+- 2/l live     sesi buka/tutup/lanjut, tarik tx tiap 2 detik dari semua PC,
+  baris HILANG bisa diisi manual, koreksi baris, riwayat sesi.
+- 3/p print    11 denominasi, pengeluaran + catatan, pratinjau struk 58/80,
+  kirim ke printer PC (pilih PC tersambung).
+- 4/c comp     daftar PC + badge hidup, tambah/ubah/hapus (blok saat sesi
+  aktif), kontrol: watcher on/off, log, wipe (PIN + ketik HAPUS).
+
+Keys: `1-4` / `s l p c` pindah view, `?` help, `esc` batal, `Ctrl+C` keluar.
+State JSON di `~/.cncli/tui/` (sesi/tx/fills/creds/comps/arsip/print-meta);
+Python CLI + SQLite tetap utuh untuk jalur skrip dan wizard plain.

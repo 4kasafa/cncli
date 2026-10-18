@@ -1,3 +1,3 @@
-"""CNcli package. Termux-first CLI; stdlib only (rich optional elsewhere)."""
+"""CNcli package. Termux-first CLI; stdlib only (React TUI in tui/)."""
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
