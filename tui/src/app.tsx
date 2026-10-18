@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { TextAttributes, type CliRenderer } from "@opentui/core";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { T } from "./theme.js";
-import { Breadcrumb, Divider, Hints, ListRow } from "./ui.js";
+import { Breadcrumb, Divider, Hints } from "./ui.js";
 import { HELP, ROOT_HINTS, VIEWS, VIEW_HINTS, viewKey, type ViewId } from "./keymap.js";
+import { RootMenu } from "./views/root.js";
 import { SetoranView } from "./views/setoran.js";
 import { LiveView } from "./views/live.js";
 import { PrintView } from "./views/print.js";
@@ -25,7 +26,7 @@ export function App({ renderer }: { renderer: CliRenderer }) {
   const [sel, setSel] = useState(0);
   const [textMode, setTextMode] = useState(false);
   const [sum, setSum] = useState<Summary>({ live: "…", print: "…", comp: "…", setoran: "…" });
-  const { width } = useTerminalDimensions();
+  const { width, height } = useTerminalDimensions();
 
   useEffect(() => {
     setTextMode(false);
@@ -86,11 +87,15 @@ export function App({ renderer }: { renderer: CliRenderer }) {
 
   return (
     <box width="100%" height="100%" flexDirection="column" backgroundColor={T.bg}>
-      <box height={1} paddingX={1} flexDirection="row" justifyContent="space-between">
-        <Breadcrumb parts={crumbs} />
-        <text fg={T.dim}>{width < 54 ? "" : "esc/h back · q quit"}</text>
-      </box>
-      <Divider />
+      {view === null && !help ? null : (
+        <>
+          <box height={1} paddingX={1} flexDirection="row" justifyContent="space-between">
+            <Breadcrumb parts={crumbs} />
+            <text fg={T.dim}>{width < 54 ? "" : "esc/h back · q quit"}</text>
+          </box>
+          <Divider />
+        </>
+      )}
       {help ? (
         <box flexGrow={1} flexDirection="column" paddingX={1}>
           {HELP.map(([k, l], i) =>
@@ -108,13 +113,7 @@ export function App({ renderer }: { renderer: CliRenderer }) {
         </box>
       ) : (
         <box flexGrow={1} flexDirection="column" paddingX={1}>
-          {view === null ? (
-            <>
-              {VIEWS.map((v, i) => (
-                <ListRow key={v.id} on={sel === i} width={width - 2} text={`${v.key}  ${v.label}`} right={sum[v.id]} />
-              ))}
-            </>
-          ) : null}
+          {view === null ? <RootMenu sum={sum} sel={sel} width={width} height={height} /> : null}
           {view === "setoran" ? <SetoranView onBack={() => setView(null)} onTextMode={setTextMode} /> : null}
           {view === "live" ? <LiveView onBack={() => setView(null)} /> : null}
           {view === "print" ? <PrintView onBack={() => setView(null)} onTextMode={setTextMode} /> : null}

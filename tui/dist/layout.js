@@ -56,3 +56,28 @@ export function formatRow(width, specs, sep = " ") {
 export function kpiCols(width) {
     return width < 72 ? 3 : 5;
 }
+// block wordmark measures 41 cols; >=46 leaves room for padding + centering slack
+export function pickLogoFont(width) {
+    if (width >= 46)
+        return "block";
+    if (width >= 32)
+        return "slick";
+    return "tiny";
+}
+export function rootBudget(width, height) {
+    let font = pickLogoFont(width);
+    let tagline = true;
+    let gaps = 1;
+    const needed = () => 2 + (font === null ? 0 : font === "tiny" ? 2 : 6) + (tagline ? 1 : 0) + (gaps ? 4 : 0) + 12;
+    while (needed() > height && !(font === null && !tagline && gaps === 0)) {
+        if (gaps === 1)
+            gaps = 0;
+        else if (tagline)
+            tagline = false;
+        else if (font !== null && font !== "tiny")
+            font = "tiny";
+        else if (font === "tiny")
+            font = null;
+    }
+    return { font, tagline, gaps };
+}
