@@ -35,7 +35,7 @@ function save(a: Comp[]): void {
     fs.writeFileSync(p + ".tmp", JSON.stringify(a));
     fs.renameSync(p + ".tmp", p);
   } catch {
-    /* ponytail: gagal tulis = daftar lama tetap */
+    /* ponytail: write failure = old list kept */
   }
 }
 
@@ -85,11 +85,11 @@ export function byName(id: string | null): string {
 export function upsert(id: string | null, name: string, base: string): { ok: boolean; error?: string; comp?: Comp } {
   const n = normName(name);
   const b = normBase(base);
-  if (!n) return { ok: false, error: "isi nama computer" };
-  if (!b) return { ok: false, error: "isi alamat: http://IP:8765" };
+  if (!n) return { ok: false, error: "name is required" };
+  if (!b) return { ok: false, error: "address is required: http://IP:8765" };
   const a = load();
   const dupe = findByBase(a, b);
-  if (dupe && dupe.id !== id) return { ok: false, error: "alamat itu sudah dipakai " + dupe.name };
+  if (dupe && dupe.id !== id) return { ok: false, error: "address already used by " + dupe.name };
   if (id) {
     for (const c of a) {
       if (c.id !== id) continue;
@@ -98,7 +98,7 @@ export function upsert(id: string | null, name: string, base: string): { ok: boo
       save(a);
       return { ok: true, comp: c };
     }
-    return { ok: false, error: "computer tak ada" };
+    return { ok: false, error: "pc not found" };
   }
   const c: Comp = { id: newId(), name: n, base: b, last_used: 0 };
   a.push(c);
@@ -166,7 +166,7 @@ async function checkOne(c: Comp, ms?: number): Promise<void> {
     setSt(c.id, "ok", String((r.data as { version?: unknown })?.version || ""));
     return;
   }
-  if (r.error === "PC versi lama, update dulu") {
+  if (r.error === Lan.ERR_LEGACY) {
     const h = await Lan.health(c.base, t);
     setSt(c.id, h.ok ? "lama" : "putus", "");
     return;

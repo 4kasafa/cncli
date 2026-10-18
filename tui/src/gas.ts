@@ -1,6 +1,6 @@
 import type { GasItem } from "./conflict.js";
 
-// gas_service.py:25 — deviceId "CNmobile" dipertahankan agar kontrak GAS tak berubah
+// gas_service.py:25 — deviceId "CNmobile" kept so the GAS contract does not change
 const GAS_URL_KASIR =
   "https://script.google.com/macros/s/AKfycbw95Qnt8U-GQWt04AeG3sBpBfcBleNLfPMSr0arOXtGDH2iZiMDVoWHyBmNpW8Shejo/exec";
 const TIMEOUT_MS = 20000;
@@ -29,7 +29,7 @@ export async function callApi(action: string, args: unknown[]): Promise<ApiRes> 
     return (await res.json()) as ApiRes;
   } catch (e) {
     const err = e as Error;
-    return { success: false, message: "Koneksi gagal: " + ((err && err.message) || err) };
+    return { success: false, message: "Connection failed: " + ((err && err.message) || err) };
   } finally {
     clearTimeout(t);
   }
@@ -38,7 +38,7 @@ export async function callApi(action: string, args: unknown[]): Promise<ApiRes> 
 export async function login(email: string, password: string): Promise<{ success: boolean; message?: string; token?: string; user?: { name?: string } | string }> {
   const res = await callApi("checkLogin", [{ email: String(email || "").trim(), password, deviceId: "CNmobile" }]);
   if (!res || !res.success) {
-    return { success: false, message: (res && res.message) || "Email atau password salah!" };
+    return { success: false, message: (res && res.message) || "Wrong email or password!" };
   }
   const m = /token=([^&]+)/.exec(String(res.redirectUrl || ""));
   const token = m ? decodeURIComponent(m[1]) : "token_" + Date.now();
@@ -51,7 +51,7 @@ export async function getDashboardData(
 ): Promise<{ success: boolean; message?: string; total_transaksi?: number; total_kurang?: number; total_lebih?: number; data?: GasItem[] }> {
   const res = await callApi("getDashboardData", [token, cashierName || ""]);
   if (!res || !res.success) {
-    return { success: false, message: (res && (res.error || res.message)) || "Gagal memuat data transaksi", data: [] };
+    return { success: false, message: (res && (res.error || res.message)) || "Failed to load transactions", data: [] };
   }
   const data = res.data || [];
   let totalKurang = 0;

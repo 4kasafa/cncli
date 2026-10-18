@@ -25,7 +25,7 @@ function save(a) {
         fs.renameSync(p + ".tmp", p);
     }
     catch {
-        /* ponytail: gagal tulis = daftar lama tetap */
+        /* ponytail: write failure = old list kept */
     }
 }
 export function normBase(v) {
@@ -77,13 +77,13 @@ export function upsert(id, name, base) {
     const n = normName(name);
     const b = normBase(base);
     if (!n)
-        return { ok: false, error: "isi nama computer" };
+        return { ok: false, error: "name is required" };
     if (!b)
-        return { ok: false, error: "isi alamat: http://IP:8765" };
+        return { ok: false, error: "address is required: http://IP:8765" };
     const a = load();
     const dupe = findByBase(a, b);
     if (dupe && dupe.id !== id)
-        return { ok: false, error: "alamat itu sudah dipakai " + dupe.name };
+        return { ok: false, error: "address already used by " + dupe.name };
     if (id) {
         for (const c of a) {
             if (c.id !== id)
@@ -93,7 +93,7 @@ export function upsert(id, name, base) {
             save(a);
             return { ok: true, comp: c };
         }
-        return { ok: false, error: "computer tak ada" };
+        return { ok: false, error: "pc not found" };
     }
     const c = { id: newId(), name: n, base: b, last_used: 0 };
     a.push(c);
@@ -151,7 +151,7 @@ async function checkOne(c, ms) {
         setSt(c.id, "ok", String(r.data?.version || ""));
         return;
     }
-    if (r.error === "PC versi lama, update dulu") {
+    if (r.error === Lan.ERR_LEGACY) {
         const h = await Lan.health(c.base, t);
         setSt(c.id, h.ok ? "lama" : "putus", "");
         return;

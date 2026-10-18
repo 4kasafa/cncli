@@ -25,7 +25,7 @@ export function padU(n, w) {
         s = "0" + s;
     return s;
 }
-// angka ala print.js: strip non-digit, kosong -> 0; "-" ditolak (null)
+// print.js-style number: strip non-digits, empty -> 0; "-" rejected (null)
 export function cleanNum(v) {
     const s = String(v == null ? "" : v);
     if (/-/.test(s))

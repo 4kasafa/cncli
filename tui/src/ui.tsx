@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { TextAttributes } from "@opentui/core";
 import { T, type Tone } from "./theme.js";
+import { alignLR, clip, kpiCols } from "./layout.js";
 
 export function Divider() {
   return <box width="100%" height={1} border={["top"]} borderStyle="single" borderColor={T.line} />;
@@ -103,6 +104,77 @@ export function Modal({ title, hint, children, widthPct = 78, heightPct = 80 }: 
         </box>
         {children}
       </box>
+    </box>
+  );
+}
+
+export function Breadcrumb({ parts }: { parts: string[] }) {
+  return (
+    <text fg={T.accent} attributes={TextAttributes.BOLD}>
+      {["cncli", ...parts].join(" > ")}
+    </text>
+  );
+}
+
+export function Hints({ items, max = 4 }: { items: [string, string][]; max?: number }) {
+  return <Keybar items={items.slice(0, max)} />;
+}
+
+export function KpiGrid({ items, width }: { items: { label: string; value: string; tone?: Tone }[]; width: number }) {
+  const n = kpiCols(width);
+  const cell = Math.max(6, Math.floor((width - (n - 1)) / n));
+  const rows: { label: string; value: string; tone?: Tone }[][] = [];
+  for (let i = 0; i < items.length; i += n) rows.push(items.slice(i, i + n));
+  return (
+    <box flexDirection="column">
+      {rows.map((r, ri) => (
+        <box key={ri} flexDirection="row" gap={1}>
+          {r.map((it, ci) => (
+            <box key={ci} flexDirection="column" width={cell}>
+              <text fg={T.faint}>{clip(it.label.toUpperCase(), cell)}</text>
+              <text fg={T[it.tone || "text"]} attributes={TextAttributes.BOLD}>
+                {clip(it.value, cell)}
+              </text>
+            </box>
+          ))}
+        </box>
+      ))}
+    </box>
+  );
+}
+
+export function ListRow({
+  on,
+  text,
+  right,
+  width,
+  tone,
+  rightTone,
+}: {
+  on: boolean;
+  text: string;
+  right?: string;
+  width: number;
+  tone?: Tone;
+  rightTone?: Tone;
+}) {
+  const line = right === undefined ? clip(text, width - 2) : alignLR(text, right, width - 2);
+  return (
+    <box flexDirection="row">
+      <text fg={on ? T.accent : T.faint}>{on ? ">" : " "}</text>
+      <text fg={T[tone || (on ? "text" : "dim")]}>{" " + line}</text>
+    </box>
+  );
+}
+
+export function Page({ title, hint, children, width }: { title: string; hint?: string; children: ReactNode; width?: number }) {
+  return (
+    <box flexDirection="column" flexGrow={1}>
+      <text fg={T.text} attributes={TextAttributes.BOLD}>
+        {width ? clip(title, width) : title}
+      </text>
+      {hint ? <text fg={T.faint}>{width ? clip(hint, width) : hint}</text> : null}
+      {children}
     </box>
   );
 }

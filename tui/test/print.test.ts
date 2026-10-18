@@ -23,9 +23,9 @@ test("struk 58mm dan 80mm: semua baris selebar kertas", () => {
 });
 
 test("validasi kirim", () => {
-  assert.equal(validateForSend({ kasir: "", kasir_id: "K1" }, { 1000: 1 }), "pilih/isi kasir dulu.");
-  assert.equal(validateForSend({ kasir: "Budi", kasir_id: "" }, { 1000: 1 }), "isi id kasir dulu.");
-  assert.equal(validateForSend({ kasir: "Budi", kasir_id: "K1" }, {}), "total fisik nol, isi denominasi dulu.");
+  assert.equal(validateForSend({ kasir: "", kasir_id: "K1" }, { 1000: 1 }), "pick/fill cashier first.");
+  assert.equal(validateForSend({ kasir: "Budi", kasir_id: "" }, { 1000: 1 }), "fill cashier id first.");
+  assert.equal(validateForSend({ kasir: "Budi", kasir_id: "K1" }, {}), "physical total zero, fill denominations first.");
   assert.equal(validateForSend({ kasir: "Budi", kasir_id: "K1" }, { 1000: 1 }), null);
 });
 

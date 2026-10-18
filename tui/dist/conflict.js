@@ -105,7 +105,7 @@ export function mergeGasData(cache, gasData) {
                 const prevGas = curIt._conflict?.gas_item;
                 const seen = curIt._dismissed_gas;
                 if (seen && !isConflict(seen, g)) {
-                    // ponytail: user sudah pilih lokal untuk versi GAS ini — diam sampai GAS berubah
+                    // ponytail: user already picked local for this GAS version — stay quiet until GAS changes
                 }
                 else if (prevGas == null || isConflict(prevGas, g)) {
                     curIt._conflict = {
@@ -133,7 +133,7 @@ export function resolve(cache, key, useGas) {
                 cache[i] = stripConflict(cache[i]._conflict?.gas_item || {});
             }
             else {
-                // ponytail: ingat versi GAS yang ditolak; flag lagi hanya bila GAS berubah
+                // ponytail: remember the rejected GAS version; re-flag only when GAS changes
                 const seenGas = cache[i]._conflict?.gas_item || null;
                 delete cache[i]._conflict;
                 if (seenGas)

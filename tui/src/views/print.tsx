@@ -1,23 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
+import { TextAttributes } from "@opentui/core";
 import { T } from "../theme.js";
-import { Field, Kpi, Modal, Msg, Sel } from "../ui.js";
-import { viewKey, type ViewId } from "../keymap.js";
+import { Field, KpiGrid, Msg } from "../ui.js";
+import { clip, formatRow, type ColSpec } from "../layout.js";
 import * as Lan from "../lan.js";
 import * as Store from "../store.js";
 import * as Comps from "../comps.js";
 import { DENOMS, buildPayload, fisikTotal, generateReceipt, latestSetoran, normShift, validateForSend, width as receiptWidth } from "../print.js";
 import { dots, rupiah, toInt } from "../fmt.js";
 
-type FocusId =
-  | "kasir"
-  | "kasir_id"
-  | "cabang"
-  | "shift"
-  | "exp-amt"
-  | "exp-note"
-  | `q-${number}`
-  | null;
+type FocusId = "kasir" | "kasir_id" | "cabang" | "shift" | "exp-amt" | "exp-note" | null;
 
 interface Picker {
   list: Comps.Comp[] | null;
@@ -29,9 +22,10 @@ interface St {
   kasir_id: string;
   cabang: string;
   shift: string;
-  metaOpen: boolean;
+  page: "main" | "meta" | "preview" | "picker";
   size: "58" | "80";
   qty: Record<number, number>;
+  dcur: number;
   expense: number;
   note: string;
   expOpen: boolean;
@@ -43,10 +37,16 @@ interface St {
   sessionLabel: string;
   seq: number;
   focus: FocusId;
-  preview: boolean;
   picker: Picker | null;
   msg: { t: string; tone: "dim" | "ok" | "bad" };
 }
+
+const META_FIELDS: [FocusId, string][] = [
+  ["kasir", "cashier"],
+  ["kasir_id", "id"],
+  ["cabang", "branch"],
+  ["shift", "shift"],
+];
 
 function fillInQtyDenoms(qty: Record<number, number>): Record<string, number> {
   const out: Record<string, number> = {};
@@ -54,15 +54,16 @@ function fillInQtyDenoms(qty: Record<number, number>): Record<string, number> {
   return out;
 }
 
-export function PrintView({ onView }: { onView: (v: ViewId) => void }) {
+export function PrintView({ onBack, onTextMode }: { onBack: () => void; onTextMode?: (b: boolean) => void }) {
   const st = useRef<St>({
     kasir: "",
     kasir_id: "",
     cabang: "",
     shift: "",
-    metaOpen: true,
+    page: "main",
     size: "58",
     qty: {},
+    dcur: 0,
     expense: 0,
     note: "",
     expOpen: false,
@@ -71,16 +72,20 @@ export function PrintView({ onView }: { onView: (v: ViewId) => void }) {
     sysCash: 0,
     noncash: 0,
     hasSession: false,
-    sessionLabel: "belum ada sesi",
+    sessionLabel: "no session",
     seq: 0,
     focus: null,
-    preview: false,
     picker: null,
     msg: { t: "", tone: "dim" },
   });
   const [, bump] = useState(0);
   const rerender = () => bump((n) => n + 1);
   const dims = useTerminalDimensions();
+
+  useEffect(() => {
+    onTextMode?.(st.current.page === "meta" || st.current.expOpen);
+    // reported again on every render via the effect below
+  });
 
   function say(t: string, tone: "dim" | "ok" | "bad") {
     st.current.msg = { t, tone };
@@ -97,7 +102,7 @@ export function PrintView({ onView }: { onView: (v: ViewId) => void }) {
       qty: fillInQtyDenoms(s.qty),
       expense: s.expense,
       note: s.note,
-      fold: s.metaOpen ? 0 : 1,
+      fold: s.page === "meta" ? 0 : 1,
     });
   }
 
@@ -124,7 +129,7 @@ export function PrintView({ onView }: { onView: (v: ViewId) => void }) {
     let sysCash = 0;
     let noncash = 0;
     let hasSession = false;
-    let label = "belum ada sesi";
+    let label = "no session";
     try {
       const ss = await Store.listSessions(10);
       const open = ss.find((x) => x.status === "open");
@@ -185,12 +190,21 @@ export function PrintView({ onView }: { onView: (v: ViewId) => void }) {
     s.cabang = m.cabang || "";
     s.shift = m.shift || "";
     fillFromSetoran(false);
-    s.metaOpen = m.fold === 0 ? true : m.fold === 1 ? false : !metaComplete();
+    s.page = metaComplete() ? "main" : "meta";
+    if (s.page === "meta") s.focus = "kasir";
     saveMeta();
     rerender();
     void refreshSys();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function nextMetaFocus(dir: 1 | -1) {
+    const s = st.current;
+    const i = META_FIELDS.findIndex(([f]) => f === s.focus);
+    const next = i < 0 ? 0 : (i + dir + META_FIELDS.length) % META_FIELDS.length;
+    s.focus = META_FIELDS[next][0];
+    rerender();
+  }
 
   function closeExpense(commit: boolean) {
     const s = st.current;
@@ -198,26 +212,25 @@ export function PrintView({ onView }: { onView: (v: ViewId) => void }) {
       s.expense = Math.max(0, toInt(s.expAmt.replace(/[^0-9]/g, "")));
       s.note = s.expNote.trim();
       saveMeta();
-      say(s.expense || s.note ? "pengeluaran tersimpan." : "pengeluaran kosong.", "ok");
+      say(s.expense || s.note ? "expense saved." : "expense cleared.", "ok");
     }
     s.expOpen = false;
     s.focus = null;
     rerender();
   }
 
-  function doPreview(): boolean {
+  function doPreview() {
     const s = st.current;
     const err = validateForSend({ kasir: s.kasir, kasir_id: s.kasir_id }, s.qty);
     if (err) {
       say(err, "bad");
       rerender();
-      return false;
+      return;
     }
     saveMeta();
-    s.preview = true;
+    s.page = "preview";
     say("", "dim");
     rerender();
-    return true;
   }
 
   function doClear() {
@@ -226,8 +239,7 @@ export function PrintView({ onView }: { onView: (v: ViewId) => void }) {
     s.expense = 0;
     s.note = "";
     saveMeta();
-    s.preview = false;
-    say("bersih.", "ok");
+    say("cleared.", "ok");
     rerender();
   }
 
@@ -239,7 +251,7 @@ export function PrintView({ onView }: { onView: (v: ViewId) => void }) {
       rerender();
       return;
     }
-    s.preview = false;
+    s.page = "picker";
     s.picker = { list: null, cursor: 0 };
     rerender();
     const list = await Comps.online();
@@ -257,7 +269,8 @@ export function PrintView({ onView }: { onView: (v: ViewId) => void }) {
   async function sendTo(comp: Comps.Comp) {
     const s = st.current;
     const my = ++s.seq;
-    say("mengirim ke " + comp.name + " ...", "dim");
+    s.page = "main";
+    say("sending to " + comp.name + " ...", "dim");
     rerender();
     Comps.touch(comp.id);
     const payload = buildPayload(
@@ -272,52 +285,42 @@ export function PrintView({ onView }: { onView: (v: ViewId) => void }) {
     if (my !== s2.seq) return;
     if (r.ok && r.data) {
       const d = r.data as { total?: number; nontunai?: number; printer?: string };
-      const t = d.total != null ? " · fisik " + rupiah(d.total) : "";
+      const t = d.total != null ? " · physical " + rupiah(d.total) : "";
       const nt = d.nontunai && d.nontunai > 0 ? " · NT " + rupiah(d.nontunai) : "";
-      say("tercetak di " + comp.name + "/" + (d.printer || "printer") + t + nt, "ok");
+      say("printed on " + comp.name + "/" + (d.printer || "printer") + t + nt, "ok");
     } else {
-      say("gagal: " + ((r && r.error) || "tanpa respon"), "bad");
+      say("failed: " + ((r && r.error) || "no response"), "bad");
     }
     rerender();
   }
 
   const s = st.current;
+  const width = Math.max(20, dims.width - 2);
   const fisik = fisikTotal(s.qty);
   const jual = fisik + s.noncash + s.expense;
   const diff = fisik - s.sysCash;
-
-  const fieldOrder: FocusId[] = s.expOpen
-    ? ["kasir", "kasir_id", "cabang", "shift", ...DENOMS.map((d) => `q-${d}` as FocusId), "exp-amt", "exp-note"]
-    : s.metaOpen
-      ? ["kasir", "kasir_id", "cabang", "shift", ...DENOMS.map((d) => `q-${d}` as FocusId)]
-      : [...DENOMS.map((d) => `q-${d}` as FocusId)];
-
-  function nextFocus(dir: 1 | -1) {
-    const sx = st.current;
-    const n = fieldOrder.length;
-    const i = sx.focus ? fieldOrder.indexOf(sx.focus) : -1;
-    const next = i < 0 ? 0 : (i + dir + n) % n;
-    sx.focus = fieldOrder[next] || null;
-    rerender();
-  }
+  const cols = width >= 72 ? 2 : 1;
+  const cellW = cols === 1 ? width : Math.floor((width - 2) / 2);
 
   useKeyboard((key) => {
     if (key.eventType === "release") return;
     const sx = st.current;
-    if (sx.picker) {
+    if (sx.page === "picker") {
       const p = sx.picker;
+      if (!p) return;
       if (key.name === "escape") {
+        sx.page = "main";
         sx.picker = null;
         rerender();
         return;
       }
       if (p.list) {
-        if (key.name === "up") {
+        if (key.name === "up" || key.name === "k") {
           p.cursor = Math.max(0, p.cursor - 1);
           rerender();
           return;
         }
-        if (key.name === "down") {
+        if (key.name === "down" || key.name === "j") {
           p.cursor = Math.min(p.list.length - 1, p.cursor + 1);
           rerender();
           return;
@@ -327,14 +330,13 @@ export function PrintView({ onView }: { onView: (v: ViewId) => void }) {
           sx.picker = null;
           rerender();
           if (c) void sendTo(c);
-          return;
         }
       }
       return;
     }
-    if (sx.preview) {
+    if (sx.page === "preview") {
       if (key.name === "escape") {
-        sx.preview = false;
+        sx.page = "main";
         rerender();
         return;
       }
@@ -347,37 +349,72 @@ export function PrintView({ onView }: { onView: (v: ViewId) => void }) {
       if (key.name === "k") void doSend();
       return;
     }
-    if (sx.expOpen && sx.focus) {
+    if (sx.page === "meta") {
       if (key.name === "escape") {
+        key.preventDefault();
+        saveMeta();
+        sx.page = "main";
+        sx.focus = null;
+        rerender();
+        return;
+      }
+      if (key.name === "tab" || key.name === "return") {
+        key.preventDefault();
+        nextMetaFocus(1);
+        return;
+      }
+      if (key.name === "up") {
+        key.preventDefault();
+        nextMetaFocus(-1);
+        return;
+      }
+      if (key.name === "down") {
+        key.preventDefault();
+        nextMetaFocus(1);
+        return;
+      }
+      return;
+    }
+    if (sx.expOpen) {
+      if (key.name === "escape") {
+        key.preventDefault();
         closeExpense(false);
         return;
       }
       if (key.name === "tab") {
-        nextFocus(1);
-        return;
-      }
-      return;
-    }
-    if (sx.focus) {
-      if (key.name === "escape") {
-        sx.focus = null;
-        sx.metaOpen = metaComplete() ? false : sx.metaOpen;
-        saveMeta();
+        key.preventDefault();
+        sx.focus = sx.focus === "exp-amt" ? "exp-note" : "exp-amt";
         rerender();
         return;
       }
-      if (key.name === "tab") {
-        nextFocus(1);
-        return;
-      }
-      return;
-    }
-    const v = viewKey(key.name);
-    if (v) {
-      if (v !== "print") onView(v);
       return;
     }
     switch (key.name) {
+      case "up":
+      case "k":
+        sx.dcur = Math.max(0, sx.dcur - cols);
+        rerender();
+        break;
+      case "down":
+      case "j":
+        sx.dcur = Math.min(DENOMS.length - 1, sx.dcur + cols);
+        rerender();
+        break;
+      case "left":
+        sx.dcur = Math.max(0, sx.dcur - 1);
+        rerender();
+        break;
+      case "right":
+        sx.dcur = Math.min(DENOMS.length - 1, sx.dcur + 1);
+        rerender();
+        break;
+      case "backspace": {
+        const d = DENOMS[sx.dcur];
+        sx.qty[d] = Math.floor((sx.qty[d] || 0) / 10);
+        saveMeta();
+        rerender();
+        break;
+      }
       case "p":
         doPreview();
         break;
@@ -390,14 +427,10 @@ export function PrintView({ onView }: { onView: (v: ViewId) => void }) {
         rerender();
         break;
       case "e":
-        sx.expOpen = !sx.expOpen;
-        if (sx.expOpen) {
-          sx.expAmt = sx.expense ? dots(sx.expense) : "";
-          sx.expNote = sx.note;
-          sx.focus = "exp-amt";
-        } else {
-          sx.focus = null;
-        }
+        sx.expOpen = true;
+        sx.expAmt = sx.expense ? dots(sx.expense) : "";
+        sx.expNote = sx.note;
+        sx.focus = "exp-amt";
         rerender();
         break;
       case "b":
@@ -407,15 +440,27 @@ export function PrintView({ onView }: { onView: (v: ViewId) => void }) {
         void refreshSys();
         break;
       case "m":
-        sx.metaOpen = !sx.metaOpen;
-        if (sx.metaOpen) sx.focus = "kasir";
-        saveMeta();
+        sx.page = "meta";
+        sx.focus = "kasir";
         rerender();
         break;
+      case "escape":
+      case "h":
+        onBack();
+        break;
+      default: {
+        if (!key.ctrl && !key.meta && key.sequence && key.sequence.length === 1 && /[0-9]/.test(key.sequence)) {
+          const d = DENOMS[sx.dcur];
+          sx.qty[d] = Math.min(9999, (sx.qty[d] || 0) * 10 + parseInt(key.sequence, 10));
+          saveMeta();
+          rerender();
+        }
+        break;
+      }
     }
   });
 
-  const receipt = s.preview
+  const receipt = s.page === "preview"
     ? generateReceipt(receiptWidth(s.size), fillInQtyDenoms(s.qty), {
         kasir: s.kasir,
         kasir_id: s.kasir_id,
@@ -427,68 +472,134 @@ export function PrintView({ onView }: { onView: (v: ViewId) => void }) {
       })
     : "";
 
+  if (s.page === "picker") {
+    const p = s.picker;
+    return (
+      <box flexDirection="column" flexGrow={1}>
+        <text fg={T.text} attributes={TextAttributes.BOLD}>
+          send to pc — online only
+        </text>
+        <box flexGrow={1} flexDirection="column" paddingTop={1}>
+          {!p || p.list === null ? (
+            <text fg={T.dim}>checking PCs...</text>
+          ) : !p.list.length ? (
+            <text fg={T.dim}>no PCs online. check wifi or add one in PCs (3).</text>
+          ) : (
+            p.list.map((c, i) => (
+              <box key={c.id} flexDirection="row">
+                <text fg={i === p.cursor ? T.accent : T.faint}>{i === p.cursor ? ">" : " "}</text>
+                <text fg={i === p.cursor ? T.text : T.dim}>{" " + clip(`${c.name}  ${c.base}`, width - 2)}</text>
+              </box>
+            ))
+          )}
+        </box>
+        <text fg={T.faint}>{clip("enter send · esc back", width)}</text>
+      </box>
+    );
+  }
+
+  if (s.page === "preview") {
+    return (
+      <box flexDirection="column" flexGrow={1}>
+        <box flexDirection="row" justifyContent="space-between">
+          <text fg={T.text} attributes={TextAttributes.BOLD}>{`receipt preview — ${s.size}mm`}</text>
+          <text fg={T.faint}>v switch size</text>
+        </box>
+        <scrollbox flexGrow={1} width="100%">
+          {receipt.split("\n").map((ln, i) => (
+            <text key={i} fg={T.text} wrapMode="none">
+              {ln || " "}
+            </text>
+          ))}
+        </scrollbox>
+        <text fg={T.faint}>{clip("k send · v 58/80 · esc back", width)}</text>
+      </box>
+    );
+  }
+
+  if (s.page === "meta") {
+    return (
+      <box flexDirection="column" flexGrow={1}>
+        <text fg={T.text} attributes={TextAttributes.BOLD}>
+          meta — cashier, branch, shift
+        </text>
+        <box flexDirection="column" paddingTop={1} gap={1}>
+          {META_FIELDS.map(([f, label]) => (
+            <Field
+              key={f}
+              label={label}
+              value={s[f as "kasir" | "kasir_id" | "cabang" | "shift"]}
+              focus={s.focus === f}
+              width={Math.max(12, Math.min(30, width - 12))}
+              onInput={(v) => {
+                st.current[f as "kasir" | "kasir_id" | "cabang" | "shift"] = v;
+              }}
+              onSubmit={() => nextMetaFocus(1)}
+            />
+          ))}
+        </box>
+        <box paddingTop={1}>
+          <text fg={T.faint}>{clip("tab/enter/up/down move · esc save & back", width)}</text>
+        </box>
+        <box flexGrow={1} />
+        <Msg text={s.msg.t} tone={s.msg.tone} />
+      </box>
+    );
+  }
+
+  const kpis = [
+    { label: "physical", value: rupiah(fisik) },
+    { label: "system", value: s.hasSession ? rupiah(s.sysCash) : "—" },
+    {
+      label: "diff",
+      value: !s.hasSession ? "—" : diff > 0 ? "+ " + rupiah(diff) : rupiah(diff),
+      tone: (!s.hasSession ? "faint" : diff > 0 ? "ok" : diff < 0 ? "bad" : "faint") as "ok" | "bad" | "faint",
+    },
+    { label: "noncash", value: rupiah(s.noncash) },
+    { label: "sales", value: rupiah(jual) },
+  ];
+
+  function denomCell(d: number, on: boolean) {
+    const q = s.qty[d] || 0;
+    const sub = q * d;
+    const spec: ColSpec[] = [
+      { key: "d", min: 9, text: dots(d) },
+      { key: "x", min: 4, align: "right", text: q ? "x" + q : "" },
+      { key: "sub", min: 6, flex: 1, align: "right", text: sub ? rupiah(sub) : "" },
+    ];
+    return (
+      <box flexDirection="row" width={cellW}>
+        <text fg={on ? T.accent : T.faint}>{on ? ">" : " "}</text>
+        <text fg={on ? T.text : T.dim} attributes={on ? TextAttributes.BOLD : undefined}>
+          {formatRow(cellW - 1, spec)}
+        </text>
+      </box>
+    );
+  }
+
+  const denomRows: number[][] = [];
+  for (let i = 0; i < DENOMS.length; i += cols) denomRows.push(DENOMS.slice(i, i + cols).map((_, j) => i + j));
+
   return (
     <box flexDirection="column" flexGrow={1}>
-      <box flexDirection="row" gap={4}>
-        <Kpi label="fisik" value={rupiah(fisik)} />
-        <Kpi label="sistem" value={s.hasSession ? rupiah(s.sysCash) : "—"} />
-        <Kpi
-          label="selisih"
-          value={!s.hasSession ? "—" : diff > 0 ? "+ " + rupiah(diff) : rupiah(diff)}
-          tone={!s.hasSession ? "faint" : diff > 0 ? "ok" : diff < 0 ? "bad" : "faint"}
-        />
-        <Kpi label="nontunai" value={rupiah(s.noncash)} />
-        <Kpi label="jual" value={rupiah(jual)} />
+      <box flexDirection="row" justifyContent="space-between">
+        <text fg={T.faint}>{clip(`${s.size}mm · ${s.sessionLabel}`, width - 14)}</text>
+        <text fg={T.faint}>r refresh</text>
       </box>
-      <box flexDirection="row" gap={2}>
-        <text fg={T.faint}>{`${s.size}mm · ${s.sessionLabel}`}</text>
-      </box>
-      {s.metaOpen ? (
-        <box flexDirection="row" gap={1}>
-          <Field label="kasir" value={s.kasir} focus={s.focus === "kasir"} width={14} onInput={(v) => { st.current.kasir = v; }} onSubmit={() => nextFocus(1)} />
-          <Field label="id" value={s.kasir_id} focus={s.focus === "kasir_id"} width={10} onInput={(v) => { st.current.kasir_id = v; }} onSubmit={() => nextFocus(1)} />
-          <Field label="cabang" value={s.cabang} focus={s.focus === "cabang"} width={12} onInput={(v) => { st.current.cabang = v; }} onSubmit={() => nextFocus(1)} />
-          <Field label="shift" value={s.shift} focus={s.focus === "shift"} width={9} onInput={(v) => { st.current.shift = v; }} onSubmit={() => nextFocus(1)} />
-        </box>
-      ) : (
-        <text fg={T.dim}>{`└─ ${s.kasir} · ${s.cabang} · ${String(s.shift).toUpperCase()}${s.kasir_id ? " · " + s.kasir_id : ""}  (m ubah)`}</text>
-      )}
-      <box flexDirection="column">
-        {DENOMS.map((d) => {
-          const f: FocusId = `q-${d}`;
-          const subtotal = (s.qty[d] || 0) * d;
-          return (
-            <box key={d} flexDirection="row" gap={1}>
-              <box width={9}>
-                <text fg={T.dim}>{dots(d)}</text>
-              </box>
-              <text fg={T.faint}>×</text>
-              <input
-                backgroundColor={T.surface}
-                textColor={T.text}
-                focusedBackgroundColor={T.surface}
-                placeholderColor={T.faint}
-                focused={s.focus === f}
-                value={s.qty[d] ? String(s.qty[d]) : ""}
-                placeholder="0"
-                width={6}
-                onInput={(v) => {
-                  const c = v.replace(/[^0-9]/g, "").replace(/^0+(?=\d)/, "");
-                  st.current.qty[d] = toInt(c);
-                  rerender();
-                }}
-                onSubmit={() => nextFocus(1)}
-              />
-              <box flexGrow={1} justifyContent="flex-end" flexDirection="row">
-                <text fg={subtotal ? T.text : T.faint}>{subtotal ? rupiah(subtotal) : ""}</text>
-              </box>
-            </box>
-          );
-        })}
+      <KpiGrid items={kpis} width={width} />
+      <text fg={T.dim}>{clip(`${s.kasir || "-"} · ${s.cabang || "-"} · ${(s.shift || "-").toUpperCase()}${s.kasir_id ? " · " + s.kasir_id : ""}   (m edit)`, width)}</text>
+      <box flexDirection="column" paddingTop={1}>
+        {denomRows.map((row, ri) => (
+          <box key={ri} flexDirection="row" gap={2}>
+            {row.map((di) => (
+              <box key={DENOMS[di]} flexDirection="row">{denomCell(DENOMS[di], di === s.dcur)}</box>
+            ))}
+          </box>
+        ))}
       </box>
       {s.expOpen ? (
         <box flexDirection="row" gap={1}>
-          <text fg={T.dim}>pengeluaran</text>
+          <text fg={T.dim}>expense</text>
           <input
             backgroundColor={T.surface}
             textColor={T.text}
@@ -507,46 +618,16 @@ export function PrintView({ onView }: { onView: (v: ViewId) => void }) {
               rerender();
             }}
           />
-          <Field label="ket" value={s.expNote} focus={s.focus === "exp-note"} width={24} onInput={(v) => { st.current.expNote = v; }} onSubmit={() => closeExpense(true)} />
-          <text fg={T.faint}>{"enter simpan · esc batal"}</text>
+          <Field label="note" value={s.expNote} focus={s.focus === "exp-note"} width={20} onInput={(v) => { st.current.expNote = v; }} onSubmit={() => closeExpense(true)} />
+          <text fg={T.faint}>{"enter save · esc cancel"}</text>
         </box>
       ) : (
         <text fg={T.dim}>
-          {s.expense || s.note ? `pengeluaran: Rp ${dots(s.expense)}${s.note ? " · " + s.note : ""}  (e ubah)` : "pengeluaran: —  (e isi)"}
+          {s.expense || s.note ? `expense: ${rupiah(s.expense)}${s.note ? " · " + s.note : ""}  (e edit)` : "expense: —  (e edit)"}
         </text>
       )}
+      <box flexGrow={1} />
       <Msg text={s.msg.t} tone={s.msg.tone} />
-      {s.preview ? (
-        <Modal title={`pratinjau struk ${s.size}mm`} hint="v ganti lebar · k kirim · esc" widthPct={60} heightPct={85}>
-          <scrollbox flexGrow={1} width="100%">
-            {receipt.split("\n").map((ln, i) => (
-              <text key={i} fg={T.text} wrapMode="none">
-                {ln || " "}
-              </text>
-            ))}
-          </scrollbox>
-        </Modal>
-      ) : null}
-      {s.picker ? (
-        <Modal title="kirim ke pc · tersambung saja" hint="esc batal" widthPct={70} heightPct={50}>
-          <box flexDirection="column">
-            {s.picker.list === null ? (
-              <text fg={T.dim}>cek PC…</text>
-            ) : !s.picker.list.length ? (
-              <text fg={T.dim}>tak ada PC tersambung. cek wifi atau tambah via view comp (4).</text>
-            ) : (
-              s.picker.list.map((c, i) => (
-                <box key={c.id} flexDirection="row" gap={1}>
-                  <Sel on={i === s.picker?.cursor} />
-                  <text fg={i === s.picker?.cursor ? T.text : T.dim}>{c.name}</text>
-                  <text fg={T.faint}>{c.base}</text>
-                </box>
-              ))
-            )}
-            <text fg={T.faint}>enter kirim · esc batal</text>
-          </box>
-        </Modal>
-      ) : null}
     </box>
   );
 }

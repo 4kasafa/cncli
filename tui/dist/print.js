@@ -142,14 +142,14 @@ export function buildPayload(meta, qty, expense, note, noncash) {
 }
 export function validateForSend(meta, qty) {
     if (!meta.kasir.trim())
-        return "pilih/isi kasir dulu.";
+        return "pick/fill cashier first.";
     if (!meta.kasir_id.trim())
-        return "isi id kasir dulu.";
+        return "fill cashier id first.";
     if (fisikTotal(qty) === 0)
-        return "total fisik nol, isi denominasi dulu.";
+        return "physical total zero, fill denominations first.";
     return null;
 }
-// entri Setoran terbaru periode berjalan dari bucket arsip email aktif
+// latest Setoran entry of the current period from the active email's archive bucket
 export function latestSetoran(email) {
     if (!email)
         return null;

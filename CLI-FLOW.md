@@ -410,16 +410,21 @@ runtime/build hilang atau keluar non-nol -> fallback wizard plain
 (tidak pernah traceback). Runtime: node >= 26.4 ATAU bun >= 1.3.14.
 Setup sekali: `cd tui && npm install`; jalur node juga `npm run build`.
 
-Empat view (gaya noir, tanpa blink):
-- 1/s setoran  login GAS auto dari creds tersimpan, arsip cache dulu,
-  sheet konflik lokal/gas, login/logout akun.
-- 2/l live     sesi buka/tutup/lanjut, tarik tx tiap 2 detik dari semua PC,
-  baris HILANG bisa diisi manual, koreksi baris, riwayat sesi.
-- 3/p print    11 denominasi, pengeluaran + catatan, pratinjau struk 58/80,
-  kirim ke printer PC (pilih PC tersambung).
-- 4/c comp     daftar PC + badge hidup, tambah/ubah/hapus (blok saat sesi
-  aktif), kontrol: watcher on/off, log, wipe (PIN + ketik HAPUS).
+Empat view ranger-style (gaya noir, tanpa blink), root page = 4 section:
+- 1/s live     sesi buka/tutup/lanjut, tarik tx tiap 2 detik dari semua PC,
+  baris missing (!) diisi manual, koreksi baris, riwayat sesi.
+- 2/p print    11 denominasi (navigasi up/down + ketik digit langsung),
+  pengeluaran + catatan, pratinjau struk 58/80 halaman penuh, kirim ke
+  printer PC (pilih PC tersambung).
+- 3/c comp     PC list satu baris + status, form tambah/ubah halaman penuh,
+  kontrol key-value: watcher on/off, log, wipe (PIN hanya saat aksi butuh).
+- 4/d setoran  login GAS halaman penuh, arsip cache-first, diff page
+  konflik lokal/gas, ganti akun / sign out.
 
-Keys: `1-4` / `s l p c` pindah view, `?` help, `esc` batal, `Ctrl+C` keluar.
+Keys: `enter`/`l` turun, `esc`/`h` naik, `q` keluar, `Ctrl+C` keluar,
+`1-4` / `s p c d` jump (1/s Live, 2/p Print, 3/c PCs, 4/d Deposits),
+`?` help halaman penuh, `up/down` atau `j/k` navigasi baris.
+Layout aman 40-60 kolom: baris clip ellipsis (tanpa wrap), tanpa border
+kotak di sempit, KPI grid adaptif (3+2 sempit, satu baris lebar).
 State JSON di `~/.cncli/tui/` (sesi/tx/fills/creds/comps/arsip/print-meta);
 Python CLI + SQLite tetap utuh untuk jalur skrip dan wizard plain.

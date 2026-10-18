@@ -25,7 +25,7 @@ function writeJson(name, v) {
         fs.renameSync(tmp, p);
     }
     catch {
-        /* ponytail: gagal tulis = state lama tetap; tanpa retry queue */
+        /* ponytail: write failure = old state kept; no retry queue */
     }
 }
 function nowIso() {

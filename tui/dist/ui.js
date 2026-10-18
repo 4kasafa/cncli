@@ -1,6 +1,7 @@
 import { jsx as _jsx, jsxs as _jsxs } from "@opentui/react/jsx-runtime";
 import { TextAttributes } from "@opentui/core";
 import { T } from "./theme.js";
+import { alignLR, clip, kpiCols } from "./layout.js";
 export function Divider() {
     return _jsx("box", { width: "100%", height: 1, border: ["top"], borderStyle: "single", borderColor: T.line });
 }
@@ -43,4 +44,25 @@ export function Secret({ label, value, focus = false, width = 24 }) {
 }
 export function Modal({ title, hint, children, widthPct = 78, heightPct = 80 }) {
     return (_jsx("box", { position: "absolute", top: 0, left: 0, width: "100%", height: "100%", justifyContent: "center", alignItems: "center", zIndex: 10, children: _jsxs("box", { width: `${widthPct}%`, height: `${heightPct}%`, backgroundColor: T.surface, border: true, borderStyle: "rounded", borderColor: T.line, flexDirection: "column", padding: 1, gap: 1, children: [_jsxs("box", { flexDirection: "row", justifyContent: "space-between", children: [_jsx("text", { fg: T.text, attributes: TextAttributes.BOLD, children: title }), hint ? _jsx("text", { fg: T.faint, children: hint }) : null] }), children] }) }));
+}
+export function Breadcrumb({ parts }) {
+    return (_jsx("text", { fg: T.accent, attributes: TextAttributes.BOLD, children: ["cncli", ...parts].join(" > ") }));
+}
+export function Hints({ items, max = 4 }) {
+    return _jsx(Keybar, { items: items.slice(0, max) });
+}
+export function KpiGrid({ items, width }) {
+    const n = kpiCols(width);
+    const cell = Math.max(6, Math.floor((width - (n - 1)) / n));
+    const rows = [];
+    for (let i = 0; i < items.length; i += n)
+        rows.push(items.slice(i, i + n));
+    return (_jsx("box", { flexDirection: "column", children: rows.map((r, ri) => (_jsx("box", { flexDirection: "row", gap: 1, children: r.map((it, ci) => (_jsxs("box", { flexDirection: "column", width: cell, children: [_jsx("text", { fg: T.faint, children: clip(it.label.toUpperCase(), cell) }), _jsx("text", { fg: T[it.tone || "text"], attributes: TextAttributes.BOLD, children: clip(it.value, cell) })] }, ci))) }, ri))) }));
+}
+export function ListRow({ on, text, right, width, tone, rightTone, }) {
+    const line = right === undefined ? clip(text, width - 2) : alignLR(text, right, width - 2);
+    return (_jsxs("box", { flexDirection: "row", children: [_jsx("text", { fg: on ? T.accent : T.faint, children: on ? ">" : " " }), _jsx("text", { fg: T[tone || (on ? "text" : "dim")], children: " " + line })] }));
+}
+export function Page({ title, hint, children, width }) {
+    return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsx("text", { fg: T.text, attributes: TextAttributes.BOLD, children: width ? clip(title, width) : title }), hint ? _jsx("text", { fg: T.faint, children: width ? clip(hint, width) : hint }) : null, children] }));
 }

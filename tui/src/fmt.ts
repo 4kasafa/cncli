@@ -31,7 +31,7 @@ export function padU(n: number, w: number): string {
   return s;
 }
 
-// angka ala print.js: strip non-digit, kosong -> 0; "-" ditolak (null)
+// print.js-style number: strip non-digits, empty -> 0; "-" rejected (null)
 export function cleanNum(v: unknown): number | null {
   const s = String(v == null ? "" : v);
   if (/-/.test(s)) return null;

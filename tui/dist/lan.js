@@ -1,4 +1,5 @@
 const TIMEOUT_MS = 8000;
+export const ERR_LEGACY = "PC version too old: update firmware first";
 function toInt(v) {
     const n = parseInt(String(v == null ? "" : v), 10);
     return isNaN(n) ? 0 : n;
@@ -8,16 +9,16 @@ export function base(b) {
 }
 function mapErr(status, bodyErr, isTimeout) {
     if (isTimeout)
-        return "PC tak terjangkau, satu WiFi?";
+        return "PC unreachable — same wifi?";
     if (status === 400)
-        return String(bodyErr || "permintaan ditolak PC");
+        return String(bodyErr || "request rejected by PC");
     if (status === 403)
-        return "PIN salah";
+        return "wrong PIN";
     if (status === 409)
-        return "PC sibuk, coba lagi";
+        return "PC busy, try again";
     if (status === 429)
-        return "terkunci 5 menit";
-    return String(bodyErr || "PC menolak (HTTP " + status + ")");
+        return "locked for 5 minutes";
+    return String(bodyErr || "PC rejected (HTTP " + status + ")");
 }
 async function get(url, ms) {
     const ctrl = new AbortController();
@@ -122,7 +123,7 @@ export async function statusGet(baseUrl, ms) {
         return { ok: false, error: r.error === "timeout" ? mapErr(0, null, true) : r.error, status: 0 };
     const d = r.data;
     if (!d || d.version == null)
-        return { ok: false, error: "PC versi lama, update dulu", status: 200 };
+        return { ok: false, error: ERR_LEGACY, status: 200 };
     return { ok: true, data: d, status: 200 };
 }
 export async function logGet(baseUrl, pin, tail) {

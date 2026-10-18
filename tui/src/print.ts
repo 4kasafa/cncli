@@ -159,13 +159,13 @@ export function buildPayload(meta: Pick<PrintMeta, "kasir" | "cabang" | "shift" 
 }
 
 export function validateForSend(meta: Pick<PrintMeta, "kasir" | "kasir_id">, qty: Record<string, number>): string | null {
-  if (!meta.kasir.trim()) return "pilih/isi kasir dulu.";
-  if (!meta.kasir_id.trim()) return "isi id kasir dulu.";
-  if (fisikTotal(qty) === 0) return "total fisik nol, isi denominasi dulu.";
+  if (!meta.kasir.trim()) return "pick/fill cashier first.";
+  if (!meta.kasir_id.trim()) return "fill cashier id first.";
+  if (fisikTotal(qty) === 0) return "physical total zero, fill denominations first.";
   return null;
 }
 
-// entri Setoran terbaru periode berjalan dari bucket arsip email aktif
+// latest Setoran entry of the current period from the active email's archive bucket
 export function latestSetoran(email: string): (GasItem & { kasir?: string }) | null {
   if (!email) return null;
   try {

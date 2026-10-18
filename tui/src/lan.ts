@@ -19,6 +19,8 @@ export interface LanTxRow {
 
 const TIMEOUT_MS = 8000;
 
+export const ERR_LEGACY = "PC version too old: update firmware first";
+
 function toInt(v: unknown): number {
   const n = parseInt(String(v == null ? "" : v), 10);
   return isNaN(n) ? 0 : n;
@@ -29,12 +31,12 @@ export function base(b: string | undefined): string {
 }
 
 function mapErr(status: number, bodyErr: unknown, isTimeout: boolean): string {
-  if (isTimeout) return "PC tak terjangkau, satu WiFi?";
-  if (status === 400) return String(bodyErr || "permintaan ditolak PC");
-  if (status === 403) return "PIN salah";
-  if (status === 409) return "PC sibuk, coba lagi";
-  if (status === 429) return "terkunci 5 menit";
-  return String(bodyErr || "PC menolak (HTTP " + status + ")");
+  if (isTimeout) return "PC unreachable — same wifi?";
+  if (status === 400) return String(bodyErr || "request rejected by PC");
+  if (status === 403) return "wrong PIN";
+  if (status === 409) return "PC busy, try again";
+  if (status === 429) return "locked for 5 minutes";
+  return String(bodyErr || "PC rejected (HTTP " + status + ")");
 }
 
 async function get(url: string, ms?: number): Promise<LanResult> {
@@ -136,7 +138,7 @@ export async function statusGet(baseUrl: string, ms?: number): Promise<LanResult
   const r = await get(base(baseUrl) + "/api/status", ms);
   if (!r.ok) return { ok: false, error: r.error === "timeout" ? mapErr(0, null, true) : r.error, status: 0 };
   const d = r.data as { version?: unknown } | null;
-  if (!d || d.version == null) return { ok: false, error: "PC versi lama, update dulu", status: 200 };
+  if (!d || d.version == null) return { ok: false, error: ERR_LEGACY, status: 200 };
   return { ok: true, data: d, status: 200 };
 }
 

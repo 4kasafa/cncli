@@ -1,51 +1,56 @@
 import { jsx as _jsx, jsxs as _jsxs } from "@opentui/react/jsx-runtime";
 import { useEffect, useRef, useState } from "react";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
+import { TextAttributes } from "@opentui/core";
 import { T } from "../theme.js";
-import { Field, Msg, Sel, Tag } from "../ui.js";
-import { viewKey } from "../keymap.js";
+import { Field, Msg } from "../ui.js";
+import { clip } from "../layout.js";
 import * as Lan from "../lan.js";
 import * as Store from "../store.js";
 import * as Comps from "../comps.js";
 function badgeOf(st) {
     if (st.state === "ok")
-        return { label: "[ok]", tone: "ok" };
+        return { label: "ok", tone: "ok" };
     if (st.state === "lama")
-        return { label: "[OK·lama]", tone: "ok" };
+        return { label: "stale", tone: "ok" };
     if (st.state === "putus")
-        return { label: "[PUTUS]", tone: "bad" };
-    return { label: "[--]", tone: "dim" };
+        return { label: "down", tone: "bad" };
+    return { label: "--", tone: "dim" };
 }
-export function CompView({ onView }) {
+export function CompView({ onBack, onTextMode }) {
     const st = useRef({
+        page: "list",
         list: [],
         active: {},
         cursor: 0,
-        adding: false,
         editingId: null,
         newName: "",
         newBase: "",
         edName: "",
         edBase: "",
+        focus: null,
         pendingDel: null,
         ctlId: null,
         ctlBusy: false,
         detail: null,
-        ctlBadge: { label: "[--]", tone: "dim" },
+        ctlBadge: { label: "--", tone: "dim" },
         ctlStatusLine: "",
         watcherEnabled: null,
-        watchPin: "",
-        wipePin: "",
+        pendingAction: null,
+        pin: "",
         wipeConfirm: "",
-        logPin: "",
+        pinFocus: "pin",
         logLines: null,
-        focus: null,
         msg: { t: "", tone: "dim" },
         ctlMsg: { t: "", tone: "dim" },
     });
     const [, bump] = useState(0);
     const rerender = () => bump((n) => n + 1);
     const dims = useTerminalDimensions();
+    useEffect(() => {
+        const s = st.current;
+        onTextMode?.(s.page === "add" || s.page === "edit" || s.pendingAction !== null);
+    });
     function say(t, tone) {
         st.current.msg = { t, tone };
     }
@@ -61,7 +66,7 @@ export function CompView({ onView }) {
     }
     function checkAllNow() {
         const s = st.current;
-        say("cek semua PC…", "dim");
+        say("checking all PCs...", "dim");
         rerender();
         void Comps.checkAll().then(() => {
             st.current.list = Comps.list();
@@ -76,23 +81,24 @@ export function CompView({ onView }) {
     }, []);
     function openCtl(id) {
         const s = st.current;
+        s.page = "ctl";
         s.ctlId = id;
         s.detail = null;
         s.watcherEnabled = null;
         s.logLines = null;
-        s.watchPin = "";
-        s.wipePin = "";
+        s.pendingAction = null;
+        s.pin = "";
         s.wipeConfirm = "";
-        s.logPin = "";
-        s.focus = null;
+        s.pinFocus = "pin";
         ctlSay("", "dim");
         rerender();
         void ctlLoad();
     }
     function closeCtl() {
         const s = st.current;
+        s.page = "list";
         s.ctlId = null;
-        s.focus = null;
+        s.pendingAction = null;
         rerender();
         void refreshList();
     }
@@ -112,25 +118,25 @@ export function CompView({ onView }) {
             const sx = st.current;
             if (sx.ctlId !== c.id)
                 return;
-            if (!r.ok && r.error === "PC versi lama, update dulu") {
+            if (!r.ok && r.error === Lan.ERR_LEGACY) {
                 const h = await Lan.health(c.base);
-                sx.ctlStatusLine = h.ok ? "└─ pc versi lama: update dulu" : "└─ pc tak terjangkau";
-                sx.ctlBadge = { label: h.ok ? "[OK·lama]" : "[PUTUS]", tone: h.ok ? "ok" : "bad" };
+                sx.ctlStatusLine = h.ok ? "legacy PC: update firmware first" : "PC not reachable";
+                sx.ctlBadge = { label: h.ok ? "stale" : "down", tone: h.ok ? "ok" : "bad" };
                 sx.watcherEnabled = null;
                 sx.detail = null;
                 return;
             }
             if (!r.ok) {
-                sx.ctlStatusLine = "└─ " + c.base;
-                sx.ctlBadge = { label: "[PUTUS]", tone: "bad" };
+                sx.ctlStatusLine = c.base;
+                sx.ctlBadge = { label: "down", tone: "bad" };
                 sx.watcherEnabled = null;
-                ctlSay(r.error || "gagal", "bad");
+                ctlSay(r.error || "failed", "bad");
                 return;
             }
             const d = (r.data || {});
             sx.detail = d;
-            sx.ctlStatusLine = "└─ v" + (d.version || "?") + " · " + (d.ip || "?") + ":" + (d.port || "?");
-            sx.ctlBadge = { label: "[OK]", tone: "ok" };
+            sx.ctlStatusLine = "v" + (d.version || "?") + " · " + (d.ip || "?") + ":" + (d.port || "?");
+            sx.ctlBadge = { label: "ok", tone: "ok" };
             sx.watcherEnabled = !!d.watcher_enabled;
             ctlSay("", "dim");
         }
@@ -147,26 +153,27 @@ export function CompView({ onView }) {
         const c = Comps.get(s.ctlId);
         if (!c)
             return;
-        if (!s.watchPin) {
-            ctlSay("isi pin watcher dulu (tab ke field pin).", "bad");
+        if (!s.pin) {
+            ctlSay("fill the pin first.", "bad");
             rerender();
             return;
         }
         s.ctlBusy = true;
         rerender();
-        const r = await Lan.watcherSet(c.base, s.watchPin, enabled);
+        const r = await Lan.watcherSet(c.base, s.pin, enabled);
         const sx = st.current;
         sx.ctlBusy = false;
         if (r.ok) {
             const d = (r.data || {});
             sx.watcherEnabled = !!d.enabled;
-            ctlSay("watcher " + (d.enabled ? "nyala" : "mati"), "ok");
-            sx.watchPin = "";
+            ctlSay("watcher " + (d.enabled ? "on" : "off"), "ok");
+            sx.pendingAction = null;
+            sx.pin = "";
         }
         else {
-            ctlSay(r.error || "gagal", "bad");
+            ctlSay(r.error || "failed", "bad");
             if (r.status === 403 || r.status === 429)
-                sx.watchPin = "";
+                sx.pin = "";
         }
         rerender();
     }
@@ -178,27 +185,28 @@ export function CompView({ onView }) {
         if (!c)
             return;
         if (await Store.isCompInOpenSession(s.ctlId)) {
-            ctlSay("pc dipakai sesi aktif: tutup sesi dulu", "bad");
+            ctlSay("pc is in an active session: close the session first", "bad");
             rerender();
             return;
         }
         s.ctlBusy = true;
         rerender();
-        const r = await Lan.wipe(c.base, s.wipePin, s.wipeConfirm);
+        const r = await Lan.wipe(c.base, s.pin, s.wipeConfirm);
         const sx = st.current;
         sx.ctlBusy = false;
         if (r.ok) {
             const n = r.data?.deleted;
-            ctlSay("dihapus " + (n == null ? "?" : n), "ok");
-            sx.wipePin = "";
+            ctlSay("deleted " + (n == null ? "?" : n), "ok");
+            sx.pendingAction = null;
+            sx.pin = "";
             sx.wipeConfirm = "";
         }
         else {
-            ctlSay(r.error || "gagal", "bad");
+            ctlSay(r.error || "failed", "bad");
             if (r.status === 400)
                 sx.wipeConfirm = "";
             else if (r.status === 403 || r.status === 429)
-                sx.wipePin = "";
+                sx.pin = "";
         }
         rerender();
     }
@@ -209,25 +217,28 @@ export function CompView({ onView }) {
         const c = Comps.get(s.ctlId);
         if (!c)
             return;
-        if (!s.logPin) {
-            ctlSay("isi pin log dulu (tab ke field pin).", "bad");
+        if (!s.pin) {
+            ctlSay("fill the pin first.", "bad");
             rerender();
             return;
         }
         s.ctlBusy = true;
         rerender();
-        const r = await Lan.logGet(c.base, s.logPin, 200);
+        const r = await Lan.logGet(c.base, s.pin, 200);
         const sx = st.current;
         sx.ctlBusy = false;
         if (r.ok) {
             const lines = r.data?.lines;
-            sx.logLines = Array.isArray(lines) && lines.length ? lines : ["(kosong)"];
+            sx.logLines = Array.isArray(lines) && lines.length ? lines : ["(empty)"];
+            sx.pendingAction = null;
+            sx.pin = "";
+            sx.page = "log";
             ctlSay("", "dim");
         }
         else {
-            ctlSay(r.error || "gagal", "bad");
+            ctlSay(r.error || "failed", "bad");
             if (r.status === 403 || r.status === 429)
-                sx.logPin = "";
+                sx.pin = "";
         }
         rerender();
     }
@@ -235,14 +246,15 @@ export function CompView({ onView }) {
         const s = st.current;
         const r = Comps.add(s.newName, s.newBase);
         if (!r.ok) {
-            say(r.error || "gagal", "bad");
+            say(r.error || "failed", "bad");
             rerender();
             return;
         }
-        s.adding = false;
+        s.page = "list";
+        s.focus = null;
         s.newName = "";
         s.newBase = "";
-        say("ditambah " + (r.comp?.name || ""), "ok");
+        say("added " + (r.comp?.name || ""), "ok");
         void refreshList();
         checkAllNow();
     }
@@ -252,202 +264,262 @@ export function CompView({ onView }) {
             return;
         const r = Comps.upsert(s.editingId, s.edName, s.edBase);
         if (!r.ok) {
-            say(r.error || "gagal", "bad");
+            say(r.error || "failed", "bad");
             rerender();
             return;
         }
+        s.page = "list";
+        s.focus = null;
         s.editingId = null;
-        say("diperbarui", "ok");
+        say("updated", "ok");
         void refreshList();
         checkAllNow();
     }
     async function deleteAt(id) {
         const s = st.current;
         if (await Store.isCompInOpenSession(id)) {
-            say("pc itu dipakai sesi aktif, tutup sesi dulu", "bad");
+            say("pc is used by an active session, close it first", "bad");
             rerender();
             return;
         }
         Comps.remove(id);
         s.pendingDel = null;
         s.editingId = null;
-        say("dihapus", "ok");
+        say("deleted", "ok");
         void refreshList();
     }
     const s = st.current;
-    const listFocus = s.focus === "new-name" || s.focus === "new-base" || s.focus === "ed-name" || s.focus === "ed-base";
-    const ctlFields = ["watch-pin", "wipe-pin", "wipe-confirm", "log-pin"];
+    const width = Math.max(20, dims.width - 2);
+    const cursor = Math.min(Math.max(0, s.cursor), Math.max(0, s.list.length - 1));
+    const listLines = Math.max(1, Math.floor((dims.height - 7) / 1));
+    const start = Math.max(0, Math.min(cursor - Math.floor(listLines / 2), s.list.length - listLines));
+    const visible = s.list.slice(start, start + listLines);
     useKeyboard((key) => {
         if (key.eventType === "release")
             return;
         const sx = st.current;
-        if (sx.ctlId) {
-            const ctl = Comps.get(sx.ctlId);
-            if (sx.focus) {
-                if (key.name === "escape") {
-                    sx.focus = null;
-                    rerender();
-                    return;
-                }
-                if (key.name === "tab") {
-                    const i = ctlFields.indexOf(sx.focus);
-                    sx.focus = ctlFields[(i + 1) % ctlFields.length] || null;
-                    rerender();
-                    return;
-                }
-                const isPin = sx.focus === "watch-pin" || sx.focus === "wipe-pin" || sx.focus === "log-pin";
-                const isConfirm = sx.focus === "wipe-confirm";
-                if (isPin || isConfirm) {
-                    if (key.name === "backspace") {
-                        if (sx.focus === "watch-pin")
-                            sx.watchPin = sx.watchPin.slice(0, -1);
-                        else if (sx.focus === "wipe-pin")
-                            sx.wipePin = sx.wipePin.slice(0, -1);
-                        else if (sx.focus === "log-pin")
-                            sx.logPin = sx.logPin.slice(0, -1);
-                        else
-                            sx.wipeConfirm = sx.wipeConfirm.slice(0, -1);
-                        rerender();
-                        return;
-                    }
-                    if (!key.ctrl && !key.meta && key.sequence && key.sequence.length === 1) {
-                        const ch = isConfirm ? key.sequence.toUpperCase() : key.sequence;
-                        if (sx.focus === "watch-pin")
-                            sx.watchPin += ch;
-                        else if (sx.focus === "wipe-pin")
-                            sx.wipePin += ch;
-                        else if (sx.focus === "log-pin")
-                            sx.logPin += ch;
-                        else
-                            sx.wipeConfirm += ch;
-                        rerender();
-                        return;
-                    }
-                }
-                return;
-            }
-            if (!ctl) {
-                closeCtl();
-                return;
-            }
+        if (sx.page === "add" || sx.page === "edit") {
             if (key.name === "escape") {
-                closeCtl();
+                key.preventDefault();
+                sx.page = "list";
+                sx.focus = null;
+                sx.editingId = null;
+                rerender();
+                return;
+            }
+            if (key.name === "tab" || key.name === "down" || key.name === "return") {
+                key.preventDefault();
+                if (sx.focus === "name")
+                    sx.focus = "base";
+                else
+                    sx.page === "add" ? saveAdd() : saveEdit();
+                rerender();
+                return;
+            }
+            if (key.name === "up") {
+                key.preventDefault();
+                sx.focus = "name";
+                rerender();
+                return;
+            }
+            return;
+        }
+        if (sx.page === "log") {
+            if (key.name === "escape" || key.name === "h") {
+                sx.page = "ctl";
+                rerender();
+            }
+            return;
+        }
+        if (sx.page === "ctl") {
+            if (sx.pendingAction) {
+                if (key.name === "escape") {
+                    sx.pendingAction = null;
+                    sx.pin = "";
+                    sx.wipeConfirm = "";
+                    sx.pinFocus = "pin";
+                    rerender();
+                    return;
+                }
+                if (key.name === "tab" && sx.pendingAction === "wipe") {
+                    sx.pinFocus = sx.pinFocus === "pin" ? "confirm" : "pin";
+                    rerender();
+                    return;
+                }
+                if (key.name === "backspace") {
+                    if (sx.pendingAction === "wipe" && sx.pinFocus === "confirm")
+                        sx.wipeConfirm = sx.wipeConfirm.slice(0, -1);
+                    else
+                        sx.pin = sx.pin.slice(0, -1);
+                    rerender();
+                    return;
+                }
+                if (key.name === "return") {
+                    if (sx.pendingAction === "wipe") {
+                        if (sx.pinFocus === "pin" && sx.pin) {
+                            sx.pinFocus = "confirm";
+                            rerender();
+                            return;
+                        }
+                        void doWipe();
+                        return;
+                    }
+                    if (sx.pendingAction === "w-on")
+                        void setWatcher(true);
+                    else if (sx.pendingAction === "w-off")
+                        void setWatcher(false);
+                    else if (sx.pendingAction === "log")
+                        void loadLog();
+                    return;
+                }
+                if (!key.ctrl && !key.meta && key.sequence && key.sequence.length === 1) {
+                    if (sx.pendingAction === "wipe" && sx.pinFocus === "confirm")
+                        sx.wipeConfirm += key.sequence.toUpperCase();
+                    else
+                        sx.pin += key.sequence;
+                    rerender();
+                }
                 return;
             }
             switch (key.name) {
                 case "w":
-                    void setWatcher(true);
+                    sx.pendingAction = "w-on";
+                    sx.pin = "";
+                    rerender();
                     break;
                 case "m":
-                    void setWatcher(false);
+                    sx.pendingAction = "w-off";
+                    sx.pin = "";
+                    rerender();
                     break;
                 case "l":
-                    void loadLog();
+                    sx.pendingAction = "log";
+                    sx.pin = "";
+                    rerender();
                     break;
                 case "x":
-                    void doWipe();
+                    sx.pendingAction = "wipe";
+                    sx.pin = "";
+                    sx.wipeConfirm = "";
+                    sx.pinFocus = "pin";
+                    rerender();
                     break;
                 case "r":
                     void ctlLoad();
                     break;
+                case "escape":
+                case "h":
+                    closeCtl();
+                    break;
             }
             return;
         }
-        if (listFocus) {
-            if (key.name === "escape") {
-                sx.adding = false;
-                sx.editingId = null;
-                rerender();
-                return;
-            }
-            if (key.name === "tab") {
-                sx.focus = sx.focus === "new-name" ? "new-base" : sx.focus === "new-base" ? "new-name" : sx.focus === "ed-name" ? "ed-base" : "ed-name";
-                rerender();
-                return;
-            }
-            return;
-        }
-        const v = viewKey(key.name);
-        if (v) {
-            if (v !== "comp")
-                onView(v);
-            return;
-        }
-        const cursor = Math.min(Math.max(0, sx.cursor), Math.max(0, sx.list.length - 1));
-        const row = sx.list[cursor];
         switch (key.name) {
             case "up":
+            case "k":
                 sx.cursor = Math.max(0, cursor - 1);
                 rerender();
                 break;
             case "down":
+            case "j":
                 sx.cursor = Math.min(Math.max(0, sx.list.length - 1), cursor + 1);
                 rerender();
                 break;
-            case "return":
+            case "return": {
+                const row = sx.list[cursor];
                 if (row)
                     openCtl(row.id);
                 break;
+            }
             case "a":
-                sx.adding = !sx.adding;
+                sx.page = "add";
                 sx.editingId = null;
                 sx.newName = "";
                 sx.newBase = "";
-                if (sx.adding)
-                    sx.focus = "new-name";
+                sx.focus = "name";
                 say("", "dim");
                 rerender();
                 break;
-            case "e":
+            case "e": {
+                const row = sx.list[cursor];
                 if (row) {
+                    sx.page = "edit";
                     sx.editingId = row.id;
-                    sx.adding = false;
                     sx.edName = row.name;
                     sx.edBase = row.base;
-                    sx.focus = "ed-name";
+                    sx.focus = "name";
                     rerender();
                 }
                 break;
-            case "d":
+            }
+            case "d": {
+                const row = sx.list[cursor];
                 if (!row)
                     break;
                 if (sx.pendingDel === row.id)
                     void deleteAt(row.id);
                 else {
                     sx.pendingDel = row.id;
-                    say("d lagi = yakin hapus " + row.name, "bad");
+                    say("press d again to delete " + row.name, "bad");
                     rerender();
                 }
                 break;
+            }
             case "r":
                 checkAllNow();
                 break;
+            case "escape":
+            case "h":
+                onBack();
+                break;
         }
     });
-    const detailLine = (() => {
-        const d = st.current.detail;
-        if (!d)
-            return null;
-        return ("watcher " +
-            (d.watcher_enabled ? "nyala" : "mati") +
-            (d.watcher_alive ? " (hidup)" : " (tak hidup)") +
-            " · ketoko " +
-            (d.ketoko ? "ada" : "tak ada") +
-            " · tx hari ini " +
-            (d.count_today == null ? "?" : String(d.count_today)) +
-            (d.last_no ? " · " + String(d.last_no) : "") +
-            (d.uptime_s != null ? " · up " + Math.round(Number(d.uptime_s)) + " dtk" : "") +
-            (d.db_busy ? " · db sibuk" : ""));
-    })();
-    if (s.ctlId) {
-        const c = Comps.get(s.ctlId);
-        const logHeight = Math.max(3, Math.floor(dims.height / 3));
-        return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsxs("box", { flexDirection: "row", gap: 2, children: [_jsx("text", { fg: T.text, children: `kontrol: ${c?.name || "--"}` }), _jsx("text", { fg: T.faint, children: c?.base || "" }), _jsx(Tag, { label: st.current.ctlBadge.label, tone: st.current.ctlBadge.tone })] }), _jsx("text", { fg: T.dim, children: st.current.ctlStatusLine }), detailLine ? _jsx("text", { fg: T.dim, children: "└─ " + detailLine }) : null, _jsxs("box", { flexDirection: "column", paddingTop: 1, children: [_jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("text", { fg: st.current.focus === "watch-pin" ? T.text : T.dim, children: "pin watcher" }), _jsx("text", { fg: T.text, children: "•".repeat(st.current.watchPin.length) + (st.current.focus === "watch-pin" ? "▏" : "") })] }), _jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("text", { fg: st.current.focus === "wipe-pin" ? T.text : T.dim, children: "pin wipe   " }), _jsx("text", { fg: T.text, children: "•".repeat(st.current.wipePin.length) + (st.current.focus === "wipe-pin" ? "▏" : "") })] }), _jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("text", { fg: st.current.focus === "wipe-confirm" ? T.text : T.dim, children: "ketik HAPUS" }), _jsx("text", { fg: T.text, children: st.current.wipeConfirm + (st.current.focus === "wipe-confirm" ? "▏" : "") })] }), _jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("text", { fg: st.current.focus === "log-pin" ? T.text : T.dim, children: "pin log    " }), _jsx("text", { fg: T.text, children: "•".repeat(st.current.logPin.length) + (st.current.focus === "log-pin" ? "▏" : "") })] }), _jsx("text", { fg: T.faint, children: "tab pilih field · w watcher nyala · m mati · l log · x wipe · r reload · esc kembali" }), _jsx(Msg, { text: st.current.ctlMsg.t, tone: st.current.ctlMsg.tone })] }), _jsxs("box", { flexDirection: "column", height: logHeight + 1, children: [_jsx("text", { fg: T.faint, children: st.current.logLines ? "└─ log (200 baris terakhir)" : "└─ log: l untuk muat" }), st.current.logLines ? (_jsx("scrollbox", { height: logHeight, width: "100%", children: st.current.logLines.map((ln, i) => (_jsx("text", { fg: T.dim, wrapMode: "none", children: ln || " " }, i))) })) : null] })] }));
+    if (s.page === "add" || s.page === "edit") {
+        const isAdd = s.page === "add";
+        return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsx("text", { fg: T.text, attributes: TextAttributes.BOLD, children: isAdd ? "add pc" : "edit pc — " + (s.edName || "") }), _jsxs("box", { flexDirection: "column", paddingTop: 1, gap: 1, children: [_jsx(Field, { label: "name", value: isAdd ? s.newName : s.edName, focus: s.focus === "name", placeholder: "kasir 1", width: Math.max(12, Math.min(30, width - 12)), onInput: (v) => {
+                                if (isAdd)
+                                    st.current.newName = v;
+                                else
+                                    st.current.edName = v;
+                            }, onSubmit: () => {
+                                st.current.focus = "base";
+                                rerender();
+                            } }), _jsx(Field, { label: "address", value: isAdd ? s.newBase : s.edBase, focus: s.focus === "base", placeholder: "http://192.168.1.5:8765", width: Math.max(12, Math.min(36, width - 12)), onInput: (v) => {
+                                if (isAdd)
+                                    st.current.newBase = v;
+                                else
+                                    st.current.edBase = v;
+                            }, onSubmit: () => (isAdd ? saveAdd() : saveEdit()) })] }), _jsx("box", { paddingTop: 1, children: _jsx("text", { fg: T.faint, children: clip("tab/enter move · enter on address saves · esc cancels", width) }) }), _jsx("box", { flexGrow: 1 }), _jsx(Msg, { text: s.msg.t, tone: s.msg.tone })] }));
     }
-    const rowLines = Math.max(2, Math.floor((dims.height - 8) / 2));
-    return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsxs("box", { flexDirection: "row", gap: 2, children: [_jsx("text", { fg: T.text, children: "daftar computer" }), _jsx("text", { fg: T.faint, children: `${s.list.length} pc · enter kontrol · a tambah · e ubah · d hapus (2x) · r cek ulang` })] }), s.adding ? (_jsxs("box", { flexDirection: "row", gap: 1, paddingTop: 1, children: [_jsx(Field, { label: "nama  ", value: s.newName, focus: s.focus === "new-name", placeholder: "kasir 1", width: 14, onInput: (v) => { st.current.newName = v; }, onSubmit: () => { st.current.focus = "new-base"; rerender(); } }), _jsx(Field, { label: "alamat", value: s.newBase, focus: s.focus === "new-base", placeholder: "http://192.168.1.5:8765", width: 26, onInput: (v) => { st.current.newBase = v; }, onSubmit: saveAdd }), _jsx("text", { fg: T.faint, children: "enter simpan · esc batal" })] })) : null, _jsx("box", { flexDirection: "column", paddingTop: 1, children: !s.list.length ? (_jsx("text", { fg: T.faint, children: "\u2514\u2500 belum ada computer. a tambah dulu." })) : (s.list.slice(0, rowLines).map((c, i) => {
+    if (s.page === "log") {
+        return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsxs("box", { flexDirection: "row", justifyContent: "space-between", children: [_jsxs("text", { fg: T.text, attributes: TextAttributes.BOLD, children: ["log \u2014 ", Comps.byName(s.ctlId)] }), _jsx("text", { fg: T.faint, children: "last 200 lines" })] }), _jsx("scrollbox", { flexGrow: 1, width: "100%", children: (s.logLines || ["(empty)"]).map((ln, i) => (_jsx("text", { fg: T.dim, wrapMode: "none", children: ln || " " }, i))) }), _jsx("text", { fg: T.faint, children: clip("esc back", width) })] }));
+    }
+    if (s.page === "ctl") {
+        const c = Comps.get(s.ctlId);
+        const d = s.detail;
+        const kv = [];
+        if (d) {
+            kv.push(["status", s.ctlStatusLine]);
+            kv.push(["watcher", (d.watcher_enabled ? "on" : "off") + (d.watcher_alive ? " (alive)" : " (dead)")]);
+            kv.push(["store", d.ketoko ? "present" : "absent"]);
+            kv.push(["today", (d.count_today == null ? "?" : String(d.count_today)) + " tx" + (d.last_no ? " · last no " + String(d.last_no) : "")]);
+            if (d.uptime_s != null)
+                kv.push(["uptime", Math.round(Number(d.uptime_s)) + "s"]);
+            if (d.db_busy)
+                kv.push(["db", "busy"]);
+        }
+        else {
+            kv.push(["status", s.ctlBusy ? "loading..." : s.ctlStatusLine || "--"]);
+        }
+        const pendingLabel = s.pendingAction === "w-on" ? "watcher pin" : s.pendingAction === "w-off" ? "watcher pin" : s.pendingAction === "wipe" ? "wipe pin" : s.pendingAction === "log" ? "log pin" : "";
+        return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsxs("box", { flexDirection: "row", justifyContent: "space-between", children: [_jsxs("box", { flexDirection: "row", gap: 1, children: [_jsxs("text", { fg: T.text, attributes: TextAttributes.BOLD, children: ["control: ", c?.name || "--"] }), _jsx("text", { fg: T[s.ctlBadge.tone], children: `[${s.ctlBadge.label}]` })] }), _jsx("text", { fg: T.faint, children: clip(c?.base || "", Math.max(0, Math.floor(width / 2))) })] }), _jsx("box", { flexDirection: "column", paddingTop: 1, children: kv.map(([k, v]) => (_jsxs("box", { flexDirection: "row", children: [_jsx("box", { width: 9, children: _jsx("text", { fg: T.faint, children: k }) }), _jsx("text", { fg: T.dim, children: clip(v, width - 10) })] }, k))) }), s.pendingAction ? (_jsxs("box", { flexDirection: "column", paddingTop: 1, gap: 1, children: [_jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("box", { width: 14, children: _jsx("text", { fg: s.pinFocus === "pin" ? T.text : T.dim, children: pendingLabel }) }), _jsx("text", { fg: T.text, children: "•".repeat(s.pin.length) + (s.pinFocus === "pin" ? "█" : "") })] }), s.pendingAction === "wipe" ? (_jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("box", { width: 14, children: _jsx("text", { fg: s.pinFocus === "confirm" ? T.text : T.dim, children: "type WIPE" }) }), _jsx("text", { fg: T.text, children: s.wipeConfirm + (s.pinFocus === "confirm" ? "█" : "") })] })) : null, _jsx("text", { fg: T.faint, children: clip(s.pendingAction === "wipe" ? "type · enter next/send · esc cancel" : "type pin · enter send · esc cancel", width) })] })) : (_jsx("box", { paddingTop: 1, children: _jsx("text", { fg: T.faint, children: clip("w watcher on · m watcher off · l log · x wipe · r refresh · esc back", width) }) })), _jsx("box", { flexGrow: 1 }), _jsx(Msg, { text: s.ctlMsg.t, tone: s.ctlMsg.tone })] }));
+    }
+    return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsxs("box", { flexDirection: "row", justifyContent: "space-between", children: [_jsxs("text", { fg: T.text, attributes: TextAttributes.BOLD, children: ["PCs (", s.list.length, ")"] }), _jsx("text", { fg: T.faint, children: "a add \u00B7 r recheck" })] }), _jsx("box", { flexGrow: 1, flexDirection: "column", paddingTop: 1, children: s.list.length ? (visible.map((c, i) => {
+                    const idx = start + i;
+                    const on = idx === cursor;
                     const b = badgeOf(Comps.st(c.id));
-                    const on = i === Math.min(Math.max(0, s.cursor), Math.max(0, s.list.length - 1));
-                    return (_jsxs("box", { flexDirection: "column", children: [_jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx(Sel, { on: on }), _jsx("text", { fg: on ? T.text : T.dim, children: c.name }), _jsx(Tag, { label: b.label, tone: b.tone }), s.active[c.id] ? _jsx(Tag, { label: "sesi aktif", tone: "warn" }) : null, s.pendingDel === c.id ? _jsx(Tag, { label: "yakin? d", tone: "bad" }) : null] }), _jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("text", { children: " " }), _jsx("text", { fg: T.faint, children: c.base })] }), s.editingId === c.id ? (_jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx(Field, { label: "nama  ", value: s.edName, focus: s.focus === "ed-name", width: 14, onInput: (v) => { st.current.edName = v; }, onSubmit: () => { st.current.focus = "ed-base"; rerender(); } }), _jsx(Field, { label: "alamat", value: s.edBase, focus: s.focus === "ed-base", width: 26, onInput: (v) => { st.current.edBase = v; }, onSubmit: saveEdit }), _jsx("text", { fg: T.faint, children: "enter simpan · esc batal" })] })) : null] }, c.id));
-                })) }), _jsx(Msg, { text: s.msg.t, tone: s.msg.tone })] }));
+                    const suffix = (s.active[c.id] ? " · session" : "") + (s.pendingDel === c.id ? " · delete? d" : "");
+                    const line = clip(`${c.name} [${b.label}] ${c.base}${suffix}`, width - 2);
+                    return (_jsxs("box", { flexDirection: "row", children: [_jsx("text", { fg: on ? T.accent : T.faint, children: on ? ">" : " " }), _jsx("text", { fg: b.label === "down" ? T.bad : on ? T.text : T.dim, attributes: on ? TextAttributes.BOLD : undefined, children: " " + line })] }, c.id));
+                })) : (_jsx("text", { fg: T.faint, children: "no PCs yet \u2014 press a to add one." })) }), _jsx(Msg, { text: s.msg.t, tone: s.msg.tone }), _jsx("text", { fg: T.faint, children: clip("enter control · a add · e edit · d delete (2x) · esc back", width) })] }));
 }

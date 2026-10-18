@@ -23,7 +23,10 @@ wizard fallback). Override state dir with `CNCLI_TUI_DIR` (default
 
 ## Views
 
-`1/s` setoran · `2/l` live · `3/p` print · `4/c` comp · `?` help · `^C` quit.
+Ranger-style root page (4 sections) → views: `1/s` Live · `2/p` Print ·
+`3/c` PCs · `4/d` Deposits. `enter`/`l` descend, `esc`/`h` ascend,
+`q` quit, `?` help page. Hints cap at 4 keys per screen; layout is safe
+at 40-60 cols (clipped single-line rows, no boxes, adaptive KPI grid).
 
 ## Test
 

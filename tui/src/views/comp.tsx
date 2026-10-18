@@ -1,24 +1,27 @@
 import { useEffect, useRef, useState } from "react";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
+import { TextAttributes } from "@opentui/core";
 import { T } from "../theme.js";
-import { Field, Modal, Msg, Sel, Tag } from "../ui.js";
-import { viewKey, type ViewId } from "../keymap.js";
+import { Field, Msg } from "../ui.js";
+import { clip } from "../layout.js";
 import * as Lan from "../lan.js";
 import * as Store from "../store.js";
 import * as Comps from "../comps.js";
 
-type FocusId = "new-name" | "new-base" | "ed-name" | "ed-base" | "watch-pin" | "wipe-pin" | "wipe-confirm" | "log-pin" | null;
+type Page = "list" | "add" | "edit" | "ctl" | "log";
+type Pending = "w-on" | "w-off" | "wipe" | "log" | null;
 
 interface St {
+  page: Page;
   list: Comps.Comp[];
   active: Record<string, boolean>;
   cursor: number;
-  adding: boolean;
   editingId: string | null;
   newName: string;
   newBase: string;
   edName: string;
   edBase: string;
+  focus: "name" | "base" | null;
   pendingDel: string | null;
   ctlId: string | null;
   ctlBusy: boolean;
@@ -26,53 +29,57 @@ interface St {
   ctlBadge: { label: string; tone: "ok" | "bad" | "dim" };
   ctlStatusLine: string;
   watcherEnabled: boolean | null;
-  watchPin: string;
-  wipePin: string;
+  pendingAction: Pending;
+  pin: string;
   wipeConfirm: string;
-  logPin: string;
+  pinFocus: "pin" | "confirm";
   logLines: string[] | null;
-  focus: FocusId;
   msg: { t: string; tone: "dim" | "ok" | "bad" };
   ctlMsg: { t: string; tone: "dim" | "ok" | "bad" };
 }
 
 function badgeOf(st: Comps.CompState): { label: string; tone: "ok" | "bad" | "dim" } {
-  if (st.state === "ok") return { label: "[ok]", tone: "ok" };
-  if (st.state === "lama") return { label: "[OK·lama]", tone: "ok" };
-  if (st.state === "putus") return { label: "[PUTUS]", tone: "bad" };
-  return { label: "[--]", tone: "dim" };
+  if (st.state === "ok") return { label: "ok", tone: "ok" };
+  if (st.state === "lama") return { label: "stale", tone: "ok" };
+  if (st.state === "putus") return { label: "down", tone: "bad" };
+  return { label: "--", tone: "dim" };
 }
 
-export function CompView({ onView }: { onView: (v: ViewId) => void }) {
+export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMode?: (b: boolean) => void }) {
   const st = useRef<St>({
+    page: "list",
     list: [],
     active: {},
     cursor: 0,
-    adding: false,
     editingId: null,
     newName: "",
     newBase: "",
     edName: "",
     edBase: "",
+    focus: null,
     pendingDel: null,
     ctlId: null,
     ctlBusy: false,
     detail: null,
-    ctlBadge: { label: "[--]", tone: "dim" },
+    ctlBadge: { label: "--", tone: "dim" },
     ctlStatusLine: "",
     watcherEnabled: null,
-    watchPin: "",
-    wipePin: "",
+    pendingAction: null,
+    pin: "",
     wipeConfirm: "",
-    logPin: "",
+    pinFocus: "pin",
     logLines: null,
-    focus: null,
     msg: { t: "", tone: "dim" },
     ctlMsg: { t: "", tone: "dim" },
   });
   const [, bump] = useState(0);
   const rerender = () => bump((n) => n + 1);
   const dims = useTerminalDimensions();
+
+  useEffect(() => {
+    const s = st.current;
+    onTextMode?.(s.page === "add" || s.page === "edit" || s.pendingAction !== null);
+  });
 
   function say(t: string, tone: "dim" | "ok" | "bad") {
     st.current.msg = { t, tone };
@@ -90,7 +97,7 @@ export function CompView({ onView }: { onView: (v: ViewId) => void }) {
 
   function checkAllNow() {
     const s = st.current;
-    say("cek semua PC…", "dim");
+    say("checking all PCs...", "dim");
     rerender();
     void Comps.checkAll().then(() => {
       st.current.list = Comps.list();
@@ -107,15 +114,15 @@ export function CompView({ onView }: { onView: (v: ViewId) => void }) {
 
   function openCtl(id: string) {
     const s = st.current;
+    s.page = "ctl";
     s.ctlId = id;
     s.detail = null;
     s.watcherEnabled = null;
     s.logLines = null;
-    s.watchPin = "";
-    s.wipePin = "";
+    s.pendingAction = null;
+    s.pin = "";
     s.wipeConfirm = "";
-    s.logPin = "";
-    s.focus = null;
+    s.pinFocus = "pin";
     ctlSay("", "dim");
     rerender();
     void ctlLoad();
@@ -123,8 +130,9 @@ export function CompView({ onView }: { onView: (v: ViewId) => void }) {
 
   function closeCtl() {
     const s = st.current;
+    s.page = "list";
     s.ctlId = null;
-    s.focus = null;
+    s.pendingAction = null;
     rerender();
     void refreshList();
   }
@@ -143,25 +151,25 @@ export function CompView({ onView }: { onView: (v: ViewId) => void }) {
       const r = await Lan.statusGet(c.base);
       const sx = st.current;
       if (sx.ctlId !== c.id) return;
-      if (!r.ok && r.error === "PC versi lama, update dulu") {
+      if (!r.ok && r.error === Lan.ERR_LEGACY) {
         const h = await Lan.health(c.base);
-        sx.ctlStatusLine = h.ok ? "└─ pc versi lama: update dulu" : "└─ pc tak terjangkau";
-        sx.ctlBadge = { label: h.ok ? "[OK·lama]" : "[PUTUS]", tone: h.ok ? "ok" : "bad" };
+        sx.ctlStatusLine = h.ok ? "legacy PC: update firmware first" : "PC not reachable";
+        sx.ctlBadge = { label: h.ok ? "stale" : "down", tone: h.ok ? "ok" : "bad" };
         sx.watcherEnabled = null;
         sx.detail = null;
         return;
       }
       if (!r.ok) {
-        sx.ctlStatusLine = "└─ " + c.base;
-        sx.ctlBadge = { label: "[PUTUS]", tone: "bad" };
+        sx.ctlStatusLine = c.base;
+        sx.ctlBadge = { label: "down", tone: "bad" };
         sx.watcherEnabled = null;
-        ctlSay(r.error || "gagal", "bad");
+        ctlSay(r.error || "failed", "bad");
         return;
       }
       const d = (r.data || {}) as Record<string, unknown>;
       sx.detail = d;
-      sx.ctlStatusLine = "└─ v" + (d.version || "?") + " · " + (d.ip || "?") + ":" + (d.port || "?");
-      sx.ctlBadge = { label: "[OK]", tone: "ok" };
+      sx.ctlStatusLine = "v" + (d.version || "?") + " · " + (d.ip || "?") + ":" + (d.port || "?");
+      sx.ctlBadge = { label: "ok", tone: "ok" };
       sx.watcherEnabled = !!d.watcher_enabled;
       ctlSay("", "dim");
     } finally {
@@ -176,24 +184,25 @@ export function CompView({ onView }: { onView: (v: ViewId) => void }) {
     if (!s.ctlId) return;
     const c = Comps.get(s.ctlId);
     if (!c) return;
-    if (!s.watchPin) {
-      ctlSay("isi pin watcher dulu (tab ke field pin).", "bad");
+    if (!s.pin) {
+      ctlSay("fill the pin first.", "bad");
       rerender();
       return;
     }
     s.ctlBusy = true;
     rerender();
-    const r = await Lan.watcherSet(c.base, s.watchPin, enabled);
+    const r = await Lan.watcherSet(c.base, s.pin, enabled);
     const sx = st.current;
     sx.ctlBusy = false;
     if (r.ok) {
       const d = (r.data || {}) as { enabled?: boolean };
       sx.watcherEnabled = !!d.enabled;
-      ctlSay("watcher " + (d.enabled ? "nyala" : "mati"), "ok");
-      sx.watchPin = "";
+      ctlSay("watcher " + (d.enabled ? "on" : "off"), "ok");
+      sx.pendingAction = null;
+      sx.pin = "";
     } else {
-      ctlSay(r.error || "gagal", "bad");
-      if (r.status === 403 || r.status === 429) sx.watchPin = "";
+      ctlSay(r.error || "failed", "bad");
+      if (r.status === 403 || r.status === 429) sx.pin = "";
     }
     rerender();
   }
@@ -204,24 +213,25 @@ export function CompView({ onView }: { onView: (v: ViewId) => void }) {
     const c = Comps.get(s.ctlId);
     if (!c) return;
     if (await Store.isCompInOpenSession(s.ctlId)) {
-      ctlSay("pc dipakai sesi aktif: tutup sesi dulu", "bad");
+      ctlSay("pc is in an active session: close the session first", "bad");
       rerender();
       return;
     }
     s.ctlBusy = true;
     rerender();
-    const r = await Lan.wipe(c.base, s.wipePin, s.wipeConfirm);
+    const r = await Lan.wipe(c.base, s.pin, s.wipeConfirm);
     const sx = st.current;
     sx.ctlBusy = false;
     if (r.ok) {
       const n = (r.data as { deleted?: number } | undefined)?.deleted;
-      ctlSay("dihapus " + (n == null ? "?" : n), "ok");
-      sx.wipePin = "";
+      ctlSay("deleted " + (n == null ? "?" : n), "ok");
+      sx.pendingAction = null;
+      sx.pin = "";
       sx.wipeConfirm = "";
     } else {
-      ctlSay(r.error || "gagal", "bad");
+      ctlSay(r.error || "failed", "bad");
       if (r.status === 400) sx.wipeConfirm = "";
-      else if (r.status === 403 || r.status === 429) sx.wipePin = "";
+      else if (r.status === 403 || r.status === 429) sx.pin = "";
     }
     rerender();
   }
@@ -231,23 +241,26 @@ export function CompView({ onView }: { onView: (v: ViewId) => void }) {
     if (!s.ctlId) return;
     const c = Comps.get(s.ctlId);
     if (!c) return;
-    if (!s.logPin) {
-      ctlSay("isi pin log dulu (tab ke field pin).", "bad");
+    if (!s.pin) {
+      ctlSay("fill the pin first.", "bad");
       rerender();
       return;
     }
     s.ctlBusy = true;
     rerender();
-    const r = await Lan.logGet(c.base, s.logPin, 200);
+    const r = await Lan.logGet(c.base, s.pin, 200);
     const sx = st.current;
     sx.ctlBusy = false;
     if (r.ok) {
       const lines = (r.data as { lines?: string[] } | undefined)?.lines;
-      sx.logLines = Array.isArray(lines) && lines.length ? lines : ["(kosong)"];
+      sx.logLines = Array.isArray(lines) && lines.length ? lines : ["(empty)"];
+      sx.pendingAction = null;
+      sx.pin = "";
+      sx.page = "log";
       ctlSay("", "dim");
     } else {
-      ctlSay(r.error || "gagal", "bad");
-      if (r.status === 403 || r.status === 429) sx.logPin = "";
+      ctlSay(r.error || "failed", "bad");
+      if (r.status === 403 || r.status === 429) sx.pin = "";
     }
     rerender();
   }
@@ -256,14 +269,15 @@ export function CompView({ onView }: { onView: (v: ViewId) => void }) {
     const s = st.current;
     const r = Comps.add(s.newName, s.newBase);
     if (!r.ok) {
-      say(r.error || "gagal", "bad");
+      say(r.error || "failed", "bad");
       rerender();
       return;
     }
-    s.adding = false;
+    s.page = "list";
+    s.focus = null;
     s.newName = "";
     s.newBase = "";
-    say("ditambah " + (r.comp?.name || ""), "ok");
+    say("added " + (r.comp?.name || ""), "ok");
     void refreshList();
     checkAllNow();
   }
@@ -273,12 +287,14 @@ export function CompView({ onView }: { onView: (v: ViewId) => void }) {
     if (!s.editingId) return;
     const r = Comps.upsert(s.editingId, s.edName, s.edBase);
     if (!r.ok) {
-      say(r.error || "gagal", "bad");
+      say(r.error || "failed", "bad");
       rerender();
       return;
     }
+    s.page = "list";
+    s.focus = null;
     s.editingId = null;
-    say("diperbarui", "ok");
+    say("updated", "ok");
     void refreshList();
     checkAllNow();
   }
@@ -286,268 +302,359 @@ export function CompView({ onView }: { onView: (v: ViewId) => void }) {
   async function deleteAt(id: string) {
     const s = st.current;
     if (await Store.isCompInOpenSession(id)) {
-      say("pc itu dipakai sesi aktif, tutup sesi dulu", "bad");
+      say("pc is used by an active session, close it first", "bad");
       rerender();
       return;
     }
     Comps.remove(id);
     s.pendingDel = null;
     s.editingId = null;
-    say("dihapus", "ok");
+    say("deleted", "ok");
     void refreshList();
   }
 
   const s = st.current;
-  const listFocus = s.focus === "new-name" || s.focus === "new-base" || s.focus === "ed-name" || s.focus === "ed-base";
-  const ctlFields: FocusId[] = ["watch-pin", "wipe-pin", "wipe-confirm", "log-pin"];
+  const width = Math.max(20, dims.width - 2);
+  const cursor = Math.min(Math.max(0, s.cursor), Math.max(0, s.list.length - 1));
+  const listLines = Math.max(1, Math.floor((dims.height - 7) / 1));
+  const start = Math.max(0, Math.min(cursor - Math.floor(listLines / 2), s.list.length - listLines));
+  const visible = s.list.slice(start, start + listLines);
 
   useKeyboard((key) => {
     if (key.eventType === "release") return;
     const sx = st.current;
-    if (sx.ctlId) {
-      const ctl = Comps.get(sx.ctlId);
-      if (sx.focus) {
-        if (key.name === "escape") {
-          sx.focus = null;
-          rerender();
-          return;
-        }
-        if (key.name === "tab") {
-          const i = ctlFields.indexOf(sx.focus);
-          sx.focus = ctlFields[(i + 1) % ctlFields.length] || null;
-          rerender();
-          return;
-        }
-        const isPin = sx.focus === "watch-pin" || sx.focus === "wipe-pin" || sx.focus === "log-pin";
-        const isConfirm = sx.focus === "wipe-confirm";
-        if (isPin || isConfirm) {
-          if (key.name === "backspace") {
-            if (sx.focus === "watch-pin") sx.watchPin = sx.watchPin.slice(0, -1);
-            else if (sx.focus === "wipe-pin") sx.wipePin = sx.wipePin.slice(0, -1);
-            else if (sx.focus === "log-pin") sx.logPin = sx.logPin.slice(0, -1);
-            else sx.wipeConfirm = sx.wipeConfirm.slice(0, -1);
-            rerender();
-            return;
-          }
-          if (!key.ctrl && !key.meta && key.sequence && key.sequence.length === 1) {
-            const ch = isConfirm ? key.sequence.toUpperCase() : key.sequence;
-            if (sx.focus === "watch-pin") sx.watchPin += ch;
-            else if (sx.focus === "wipe-pin") sx.wipePin += ch;
-            else if (sx.focus === "log-pin") sx.logPin += ch;
-            else sx.wipeConfirm += ch;
-            rerender();
-            return;
-          }
-        }
-        return;
-      }
-      if (!ctl) {
-        closeCtl();
-        return;
-      }
+
+    if (sx.page === "add" || sx.page === "edit") {
       if (key.name === "escape") {
-        closeCtl();
+        key.preventDefault();
+        sx.page = "list";
+        sx.focus = null;
+        sx.editingId = null;
+        rerender();
+        return;
+      }
+      if (key.name === "tab" || key.name === "down" || key.name === "return") {
+        key.preventDefault();
+        if (sx.focus === "name") sx.focus = "base";
+        else sx.page === "add" ? saveAdd() : saveEdit();
+        rerender();
+        return;
+      }
+      if (key.name === "up") {
+        key.preventDefault();
+        sx.focus = "name";
+        rerender();
+        return;
+      }
+      return;
+    }
+
+    if (sx.page === "log") {
+      if (key.name === "escape" || key.name === "h") {
+        sx.page = "ctl";
+        rerender();
+      }
+      return;
+    }
+
+    if (sx.page === "ctl") {
+      if (sx.pendingAction) {
+        if (key.name === "escape") {
+          sx.pendingAction = null;
+          sx.pin = "";
+          sx.wipeConfirm = "";
+          sx.pinFocus = "pin";
+          rerender();
+          return;
+        }
+        if (key.name === "tab" && sx.pendingAction === "wipe") {
+          sx.pinFocus = sx.pinFocus === "pin" ? "confirm" : "pin";
+          rerender();
+          return;
+        }
+        if (key.name === "backspace") {
+          if (sx.pendingAction === "wipe" && sx.pinFocus === "confirm") sx.wipeConfirm = sx.wipeConfirm.slice(0, -1);
+          else sx.pin = sx.pin.slice(0, -1);
+          rerender();
+          return;
+        }
+        if (key.name === "return") {
+          if (sx.pendingAction === "wipe") {
+            if (sx.pinFocus === "pin" && sx.pin) {
+              sx.pinFocus = "confirm";
+              rerender();
+              return;
+            }
+            void doWipe();
+            return;
+          }
+          if (sx.pendingAction === "w-on") void setWatcher(true);
+          else if (sx.pendingAction === "w-off") void setWatcher(false);
+          else if (sx.pendingAction === "log") void loadLog();
+          return;
+        }
+        if (!key.ctrl && !key.meta && key.sequence && key.sequence.length === 1) {
+          if (sx.pendingAction === "wipe" && sx.pinFocus === "confirm") sx.wipeConfirm += key.sequence.toUpperCase();
+          else sx.pin += key.sequence;
+          rerender();
+        }
         return;
       }
       switch (key.name) {
         case "w":
-          void setWatcher(true);
+          sx.pendingAction = "w-on";
+          sx.pin = "";
+          rerender();
           break;
         case "m":
-          void setWatcher(false);
+          sx.pendingAction = "w-off";
+          sx.pin = "";
+          rerender();
           break;
         case "l":
-          void loadLog();
+          sx.pendingAction = "log";
+          sx.pin = "";
+          rerender();
           break;
         case "x":
-          void doWipe();
+          sx.pendingAction = "wipe";
+          sx.pin = "";
+          sx.wipeConfirm = "";
+          sx.pinFocus = "pin";
+          rerender();
           break;
         case "r":
           void ctlLoad();
           break;
+        case "escape":
+        case "h":
+          closeCtl();
+          break;
       }
       return;
     }
-    if (listFocus) {
-      if (key.name === "escape") {
-        sx.adding = false;
-        sx.editingId = null;
-        rerender();
-        return;
-      }
-      if (key.name === "tab") {
-        sx.focus = sx.focus === "new-name" ? "new-base" : sx.focus === "new-base" ? "new-name" : sx.focus === "ed-name" ? "ed-base" : "ed-name";
-        rerender();
-        return;
-      }
-      return;
-    }
-    const v = viewKey(key.name);
-    if (v) {
-      if (v !== "comp") onView(v);
-      return;
-    }
-    const cursor = Math.min(Math.max(0, sx.cursor), Math.max(0, sx.list.length - 1));
-    const row = sx.list[cursor];
+
     switch (key.name) {
       case "up":
+      case "k":
         sx.cursor = Math.max(0, cursor - 1);
         rerender();
         break;
       case "down":
+      case "j":
         sx.cursor = Math.min(Math.max(0, sx.list.length - 1), cursor + 1);
         rerender();
         break;
-      case "return":
+      case "return": {
+        const row = sx.list[cursor];
         if (row) openCtl(row.id);
         break;
+      }
       case "a":
-        sx.adding = !sx.adding;
+        sx.page = "add";
         sx.editingId = null;
         sx.newName = "";
         sx.newBase = "";
-        if (sx.adding) sx.focus = "new-name";
+        sx.focus = "name";
         say("", "dim");
         rerender();
         break;
-      case "e":
+      case "e": {
+        const row = sx.list[cursor];
         if (row) {
+          sx.page = "edit";
           sx.editingId = row.id;
-          sx.adding = false;
           sx.edName = row.name;
           sx.edBase = row.base;
-          sx.focus = "ed-name";
+          sx.focus = "name";
           rerender();
         }
         break;
-      case "d":
+      }
+      case "d": {
+        const row = sx.list[cursor];
         if (!row) break;
         if (sx.pendingDel === row.id) void deleteAt(row.id);
         else {
           sx.pendingDel = row.id;
-          say("d lagi = yakin hapus " + row.name, "bad");
+          say("press d again to delete " + row.name, "bad");
           rerender();
         }
         break;
+      }
       case "r":
         checkAllNow();
+        break;
+      case "escape":
+      case "h":
+        onBack();
         break;
     }
   });
 
-  const detailLine = (() => {
-    const d = st.current.detail;
-    if (!d) return null;
-    return (
-      "watcher " +
-      (d.watcher_enabled ? "nyala" : "mati") +
-      (d.watcher_alive ? " (hidup)" : " (tak hidup)") +
-      " · ketoko " +
-      (d.ketoko ? "ada" : "tak ada") +
-      " · tx hari ini " +
-      (d.count_today == null ? "?" : String(d.count_today)) +
-      (d.last_no ? " · " + String(d.last_no) : "") +
-      (d.uptime_s != null ? " · up " + Math.round(Number(d.uptime_s)) + " dtk" : "") +
-      (d.db_busy ? " · db sibuk" : "")
-    );
-  })();
-
-  if (s.ctlId) {
-    const c = Comps.get(s.ctlId);
-    const logHeight = Math.max(3, Math.floor(dims.height / 3));
+  if (s.page === "add" || s.page === "edit") {
+    const isAdd = s.page === "add";
     return (
       <box flexDirection="column" flexGrow={1}>
-        <box flexDirection="row" gap={2}>
-          <text fg={T.text}>{`kontrol: ${c?.name || "--"}`}</text>
-          <text fg={T.faint}>{c?.base || ""}</text>
-          <Tag label={st.current.ctlBadge.label} tone={st.current.ctlBadge.tone} />
+        <text fg={T.text} attributes={TextAttributes.BOLD}>
+          {isAdd ? "add pc" : "edit pc — " + (s.edName || "")}
+        </text>
+        <box flexDirection="column" paddingTop={1} gap={1}>
+          <Field
+            label="name"
+            value={isAdd ? s.newName : s.edName}
+            focus={s.focus === "name"}
+            placeholder="kasir 1"
+            width={Math.max(12, Math.min(30, width - 12))}
+            onInput={(v) => {
+              if (isAdd) st.current.newName = v;
+              else st.current.edName = v;
+            }}
+            onSubmit={() => {
+              st.current.focus = "base";
+              rerender();
+            }}
+          />
+          <Field
+            label="address"
+            value={isAdd ? s.newBase : s.edBase}
+            focus={s.focus === "base"}
+            placeholder="http://192.168.1.5:8765"
+            width={Math.max(12, Math.min(36, width - 12))}
+            onInput={(v) => {
+              if (isAdd) st.current.newBase = v;
+              else st.current.edBase = v;
+            }}
+            onSubmit={() => (isAdd ? saveAdd() : saveEdit())}
+          />
         </box>
-        <text fg={T.dim}>{st.current.ctlStatusLine}</text>
-        {detailLine ? <text fg={T.dim}>{"└─ " + detailLine}</text> : null}
-        <box flexDirection="column" paddingTop={1}>
-          <box flexDirection="row" gap={1}>
-            <text fg={st.current.focus === "watch-pin" ? T.text : T.dim}>{"pin watcher"}</text>
-            <text fg={T.text}>{"•".repeat(st.current.watchPin.length) + (st.current.focus === "watch-pin" ? "▏" : "")}</text>
-          </box>
-          <box flexDirection="row" gap={1}>
-            <text fg={st.current.focus === "wipe-pin" ? T.text : T.dim}>{"pin wipe   "}</text>
-            <text fg={T.text}>{"•".repeat(st.current.wipePin.length) + (st.current.focus === "wipe-pin" ? "▏" : "")}</text>
-          </box>
-          <box flexDirection="row" gap={1}>
-            <text fg={st.current.focus === "wipe-confirm" ? T.text : T.dim}>{"ketik HAPUS"}</text>
-            <text fg={T.text}>{st.current.wipeConfirm + (st.current.focus === "wipe-confirm" ? "▏" : "")}</text>
-          </box>
-          <box flexDirection="row" gap={1}>
-            <text fg={st.current.focus === "log-pin" ? T.text : T.dim}>{"pin log    "}</text>
-            <text fg={T.text}>{"•".repeat(st.current.logPin.length) + (st.current.focus === "log-pin" ? "▏" : "")}</text>
-          </box>
-          <text fg={T.faint}>{"tab pilih field · w watcher nyala · m mati · l log · x wipe · r reload · esc kembali"}</text>
-          <Msg text={st.current.ctlMsg.t} tone={st.current.ctlMsg.tone} />
+        <box paddingTop={1}>
+          <text fg={T.faint}>{clip("tab/enter move · enter on address saves · esc cancels", width)}</text>
         </box>
-        <box flexDirection="column" height={logHeight + 1}>
-          <text fg={T.faint}>{st.current.logLines ? "└─ log (200 baris terakhir)" : "└─ log: l untuk muat"}</text>
-          {st.current.logLines ? (
-            <scrollbox height={logHeight} width="100%">
-              {st.current.logLines.map((ln, i) => (
-                <text key={i} fg={T.dim} wrapMode="none">
-                  {ln || " "}
-                </text>
-              ))}
-            </scrollbox>
-          ) : null}
-        </box>
+        <box flexGrow={1} />
+        <Msg text={s.msg.t} tone={s.msg.tone} />
       </box>
     );
   }
 
-  const rowLines = Math.max(2, Math.floor((dims.height - 8) / 2));
+  if (s.page === "log") {
+    return (
+      <box flexDirection="column" flexGrow={1}>
+        <box flexDirection="row" justifyContent="space-between">
+          <text fg={T.text} attributes={TextAttributes.BOLD}>
+            log — {Comps.byName(s.ctlId)}
+          </text>
+          <text fg={T.faint}>last 200 lines</text>
+        </box>
+        <scrollbox flexGrow={1} width="100%">
+          {(s.logLines || ["(empty)"]).map((ln, i) => (
+            <text key={i} fg={T.dim} wrapMode="none">
+              {ln || " "}
+            </text>
+          ))}
+        </scrollbox>
+        <text fg={T.faint}>{clip("esc back", width)}</text>
+      </box>
+    );
+  }
+
+  if (s.page === "ctl") {
+    const c = Comps.get(s.ctlId);
+    const d = s.detail;
+    const kv: [string, string][] = [];
+    if (d) {
+      kv.push(["status", s.ctlStatusLine]);
+      kv.push(["watcher", (d.watcher_enabled ? "on" : "off") + (d.watcher_alive ? " (alive)" : " (dead)")]);
+      kv.push(["store", d.ketoko ? "present" : "absent"]);
+      kv.push(["today", (d.count_today == null ? "?" : String(d.count_today)) + " tx" + (d.last_no ? " · last no " + String(d.last_no) : "")]);
+      if (d.uptime_s != null) kv.push(["uptime", Math.round(Number(d.uptime_s)) + "s"]);
+      if (d.db_busy) kv.push(["db", "busy"]);
+    } else {
+      kv.push(["status", s.ctlBusy ? "loading..." : s.ctlStatusLine || "--"]);
+    }
+    const pendingLabel =
+      s.pendingAction === "w-on" ? "watcher pin" : s.pendingAction === "w-off" ? "watcher pin" : s.pendingAction === "wipe" ? "wipe pin" : s.pendingAction === "log" ? "log pin" : "";
+    return (
+      <box flexDirection="column" flexGrow={1}>
+        <box flexDirection="row" justifyContent="space-between">
+          <box flexDirection="row" gap={1}>
+            <text fg={T.text} attributes={TextAttributes.BOLD}>
+              control: {c?.name || "--"}
+            </text>
+            <text fg={T[s.ctlBadge.tone]}>{`[${s.ctlBadge.label}]`}</text>
+          </box>
+          <text fg={T.faint}>{clip(c?.base || "", Math.max(0, Math.floor(width / 2)))}</text>
+        </box>
+        <box flexDirection="column" paddingTop={1}>
+          {kv.map(([k, v]) => (
+            <box key={k} flexDirection="row">
+              <box width={9}>
+                <text fg={T.faint}>{k}</text>
+              </box>
+              <text fg={T.dim}>{clip(v, width - 10)}</text>
+            </box>
+          ))}
+        </box>
+        {s.pendingAction ? (
+          <box flexDirection="column" paddingTop={1} gap={1}>
+            <box flexDirection="row" gap={1}>
+              <box width={14}>
+                <text fg={s.pinFocus === "pin" ? T.text : T.dim}>{pendingLabel}</text>
+              </box>
+              <text fg={T.text}>{"•".repeat(s.pin.length) + (s.pinFocus === "pin" ? "█" : "")}</text>
+            </box>
+            {s.pendingAction === "wipe" ? (
+              <box flexDirection="row" gap={1}>
+                <box width={14}>
+                  <text fg={s.pinFocus === "confirm" ? T.text : T.dim}>type WIPE</text>
+                </box>
+                <text fg={T.text}>{s.wipeConfirm + (s.pinFocus === "confirm" ? "█" : "")}</text>
+              </box>
+            ) : null}
+            <text fg={T.faint}>{clip(s.pendingAction === "wipe" ? "type · enter next/send · esc cancel" : "type pin · enter send · esc cancel", width)}</text>
+          </box>
+        ) : (
+          <box paddingTop={1}>
+            <text fg={T.faint}>{clip("w watcher on · m watcher off · l log · x wipe · r refresh · esc back", width)}</text>
+          </box>
+        )}
+        <box flexGrow={1} />
+        <Msg text={s.ctlMsg.t} tone={s.ctlMsg.tone} />
+      </box>
+    );
+  }
 
   return (
     <box flexDirection="column" flexGrow={1}>
-      <box flexDirection="row" gap={2}>
-        <text fg={T.text}>daftar computer</text>
-        <text fg={T.faint}>{`${s.list.length} pc · enter kontrol · a tambah · e ubah · d hapus (2x) · r cek ulang`}</text>
+      <box flexDirection="row" justifyContent="space-between">
+        <text fg={T.text} attributes={TextAttributes.BOLD}>
+          PCs ({s.list.length})
+        </text>
+        <text fg={T.faint}>a add · r recheck</text>
       </box>
-      {s.adding ? (
-        <box flexDirection="row" gap={1} paddingTop={1}>
-          <Field label="nama  " value={s.newName} focus={s.focus === "new-name"} placeholder="kasir 1" width={14} onInput={(v) => { st.current.newName = v; }} onSubmit={() => { st.current.focus = "new-base"; rerender(); }} />
-          <Field label="alamat" value={s.newBase} focus={s.focus === "new-base"} placeholder="http://192.168.1.5:8765" width={26} onInput={(v) => { st.current.newBase = v; }} onSubmit={saveAdd} />
-          <text fg={T.faint}>{"enter simpan · esc batal"}</text>
-        </box>
-      ) : null}
-      <box flexDirection="column" paddingTop={1}>
-        {!s.list.length ? (
-          <text fg={T.faint}>└─ belum ada computer. a tambah dulu.</text>
-        ) : (
-          s.list.slice(0, rowLines).map((c, i) => {
+      <box flexGrow={1} flexDirection="column" paddingTop={1}>
+        {s.list.length ? (
+          visible.map((c, i) => {
+            const idx = start + i;
+            const on = idx === cursor;
             const b = badgeOf(Comps.st(c.id));
-            const on = i === Math.min(Math.max(0, s.cursor), Math.max(0, s.list.length - 1));
+            const suffix = (s.active[c.id] ? " · session" : "") + (s.pendingDel === c.id ? " · delete? d" : "");
+            const line = clip(`${c.name} [${b.label}] ${c.base}${suffix}`, width - 2);
             return (
-              <box key={c.id} flexDirection="column">
-                <box flexDirection="row" gap={1}>
-                  <Sel on={on} />
-                  <text fg={on ? T.text : T.dim}>{c.name}</text>
-                  <Tag label={b.label} tone={b.tone} />
-                  {s.active[c.id] ? <Tag label="sesi aktif" tone="warn" /> : null}
-                  {s.pendingDel === c.id ? <Tag label="yakin? d" tone="bad" /> : null}
-                </box>
-                <box flexDirection="row" gap={1}>
-                  <text>{" "}</text>
-                  <text fg={T.faint}>{c.base}</text>
-                </box>
-                {s.editingId === c.id ? (
-                  <box flexDirection="row" gap={1}>
-                    <Field label="nama  " value={s.edName} focus={s.focus === "ed-name"} width={14} onInput={(v) => { st.current.edName = v; }} onSubmit={() => { st.current.focus = "ed-base"; rerender(); }} />
-                    <Field label="alamat" value={s.edBase} focus={s.focus === "ed-base"} width={26} onInput={(v) => { st.current.edBase = v; }} onSubmit={saveEdit} />
-                    <text fg={T.faint}>{"enter simpan · esc batal"}</text>
-                  </box>
-                ) : null}
+              <box key={c.id} flexDirection="row">
+                <text fg={on ? T.accent : T.faint}>{on ? ">" : " "}</text>
+                <text fg={b.label === "down" ? T.bad : on ? T.text : T.dim} attributes={on ? TextAttributes.BOLD : undefined}>
+                  {" " + line}
+                </text>
               </box>
             );
           })
+        ) : (
+          <text fg={T.faint}>no PCs yet — press a to add one.</text>
         )}
       </box>
       <Msg text={s.msg.t} tone={s.msg.tone} />
+      <text fg={T.faint}>{clip("enter control · a add · e edit · d delete (2x) · esc back", width)}</text>
     </box>
   );
 }

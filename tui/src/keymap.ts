@@ -1,79 +1,73 @@
-export type ViewId = "setoran" | "live" | "print" | "comp";
+export type ViewId = "live" | "print" | "comp" | "setoran";
 
 export const VIEWS: { id: ViewId; key: string; label: string }[] = [
-  { id: "setoran", key: "1", label: "setoran" },
-  { id: "live", key: "2", label: "live" },
-  { id: "print", key: "3", label: "print" },
-  { id: "comp", key: "4", label: "comp" },
+  { id: "live", key: "1", label: "Live" },
+  { id: "print", key: "2", label: "Print" },
+  { id: "comp", key: "3", label: "PCs" },
+  { id: "setoran", key: "4", label: "Deposits" },
 ];
 
 export function viewKey(name: string): ViewId | null {
   switch (name) {
     case "1":
     case "s":
-      return "setoran";
-    case "2":
-    case "l":
       return "live";
-    case "3":
+    case "2":
     case "p":
       return "print";
-    case "4":
+    case "3":
     case "c":
       return "comp";
+    case "4":
+    case "d":
+      return "setoran";
     default:
       return null;
   }
 }
 
-export const GLOBAL_KEYBAR: [string, string][] = [
-  ["1-4", "view"],
+export const ROOT_HINTS: [string, string][] = [
+  ["enter/l", "open"],
+  ["1-4", "jump"],
   ["?", "help"],
-  ["^c", "keluar"],
+  ["q", "quit"],
 ];
 
-export const VIEW_KEYBAR: Record<ViewId, [string, string][]> = {
-  setoran: [
-    ["enter", "beda"],
-    ["r", "sinkron"],
-    ["g", "ganti akun"],
-    ["x", "keluar"],
-  ],
+export const VIEW_HINTS: Record<ViewId, [string, string][]> = {
   live: [
-    ["enter", "buka/lanjut"],
-    ["x", "tutup sesi"],
-    ["a", "+pc"],
-    ["e", "koreksi/isi"],
-    ["r", "retry"],
-    ["d", "hapus sesi"],
+    ["enter", "open"],
+    ["e", "edit"],
+    ["esc", "back"],
+    ["?", "help"],
   ],
   print: [
-    ["p", "pratinjau"],
-    ["k", "kirim"],
-    ["v", "58/80"],
-    ["e", "pengeluaran"],
-    ["b", "bersih"],
+    ["m", "meta"],
+    ["p", "preview"],
+    ["k", "send"],
+    ["esc", "back"],
   ],
   comp: [
-    ["enter", "kontrol"],
-    ["a", "+pc"],
-    ["e", "ubah"],
-    ["d", "hapus"],
-    ["r", "cek ulang"],
+    ["enter", "open"],
+    ["a", "add"],
+    ["e", "edit"],
+    ["esc", "back"],
+  ],
+  setoran: [
+    ["r", "sync"],
+    ["enter", "diff"],
+    ["esc", "back"],
+    ["?", "help"],
   ],
 };
 
 export const HELP: [string, string][] = [
-  ["1 / s", "view setoran (login GAS, arsip, konflik)"],
-  ["2 / l", "view live (sesi tarik tx dari PC)"],
-  ["3 / p", "view print (denominasi + struk)"],
-  ["4 / c", "view comp (daftar PC + kontrol)"],
+  ["nav", "enter / l open · esc / h back · up/down or j/k move"],
+  ["jump", "1/s Live · 2/p Print · 3/c PCs · 4/d Deposits"],
+  ["live", "enter session · e edit row · a add pc · r retry · d delete · x close"],
+  ["print", "m meta · p preview · k send · v 58/80 · e expense · b clear"],
+  ["comp", "enter control · a add · e edit · d delete · r check"],
+  ["deposits", "r sync · enter diff · l local · g gas · x sign out"],
   ["", ""],
-  ["setoran", "r sinkron · enter lihat beda · l/g pakai lokal/gas di sheet · g ganti akun · x keluar"],
-  ["live", "enter buka/lanjut sesi · x tutup · a tambah pc · e koreksi/isi baris · d hapus sesi (2x) · r retry"],
-  ["print", "p pratinjau · k kirim ke pc · v toggle 58/80 · e pengeluaran · b bersih · tab antar field"],
-  ["comp", "enter kontrol · a tambah · e ubah · d hapus (2x) · r cek ulang"],
-  ["kontrol", "w watcher nyala · m mati · l muat log · x wipe (pin + HAPUS) · tab antar field"],
-  ["", ""],
-  ["umum", "esc kembali/batal · ? bantuan · ^c keluar"],
+  ["keys", "? help · q quit · ^c quit"],
+  ["note", "designed for 40-60 cols; lines clip, never wrap"],
 ];

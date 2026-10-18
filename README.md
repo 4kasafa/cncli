@@ -46,15 +46,16 @@ cncli --help             # all commands (8 + hidden aliases)
 cncli -v                 # install check (prints version)
 ```
 
-Menu map (the React TUI inside `cncli`):
+Menu map (the React TUI inside `cncli`) — ranger-style root page, `enter/l`
+open, `esc/h` back, `q` quit:
 
 | Key | View | Does |
 |-----|------|------|
-| 1 / s | setoran | GAS auto-login from saved creds, archive cache-first, conflict sheet local/gas |
-| 2 / l | live | open/close/resume session, pulls tx every 2s, fill HILANG, fix rows, history |
-| 3 / p | print | 11 denominations, expense + note, 58/80 receipt preview, send to PC printer |
-| 4 / c | comp | PC list + live badges, add/edit/delete, watcher/log/wipe control |
-| ? | help | full key reference (`1-4` or `s l p c` switch views) |
+| 1 / s | Live | open/close/resume session, pulls tx every 2s, fill missing (!), fix rows, history |
+| 2 / p | Print | 11 denominations (digits type straight in), expense + note, 58/80 receipt preview, send to PC printer |
+| 3 / c | PCs | PC list + status, add/edit forms, control page: watcher/log/wipe (PIN on demand) |
+| 4 / d | Deposits | GAS sign-in, archive cache-first, conflict diff page local/gas, account |
+| ? | help | full help page (`1-4` or `s p c d` jump anywhere) |
 
 Plain fallback (no node/bun runtime, or pipe): `01 SESSION` / `02 CASH` /
 `03 SETORAN` / `04 PC ADMIN` wizards with `00` back.

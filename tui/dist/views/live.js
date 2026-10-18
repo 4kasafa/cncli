@@ -1,9 +1,10 @@
 import { jsx as _jsx, jsxs as _jsxs } from "@opentui/react/jsx-runtime";
 import { useEffect, useRef, useState } from "react";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
+import { TextAttributes } from "@opentui/core";
 import { T } from "../theme.js";
-import { Modal, Msg, Sel, Tag } from "../ui.js";
-import { viewKey } from "../keymap.js";
+import { KpiGrid, Msg } from "../ui.js";
+import { clip, formatRow } from "../layout.js";
 import * as Lan from "../lan.js";
 import * as Store from "../store.js";
 import * as Comps from "../comps.js";
@@ -17,7 +18,40 @@ function pcLabel(pcs) {
         return names.join(" + ");
     return names[0] + " + " + names[1] + " (+" + (names.length - 2) + ")";
 }
-export function LiveView({ onView }) {
+function statusTone(s) {
+    if (s === "OPEN")
+        return "ok";
+    if (s === "PARTIAL")
+        return "warn";
+    if (s === "DOWN")
+        return "bad";
+    return "dim";
+}
+function Row({ on, bad, width, spec, tone, }) {
+    const line = formatRow(Math.max(0, width - 2), spec);
+    const marker = bad ? "!" : on ? ">" : " ";
+    const fg = bad ? T.warn : on ? T.text : T[tone || "dim"];
+    return (_jsxs("box", { flexDirection: "row", children: [_jsx("text", { fg: bad || on ? (bad ? T.warn : T.accent) : T.faint, children: marker }), _jsx("text", { fg: fg, attributes: on ? TextAttributes.BOLD : undefined, children: " " + line })] }));
+}
+function txSpec(it) {
+    if (it.t === "hilang") {
+        return [
+            { key: "text", min: 10, flex: 1, text: `no ${padU(it.n, it.w)} · not on PC — e fill` },
+            { key: "pc", min: 4, text: it.pc_name || "" },
+        ];
+    }
+    const r = it.r;
+    const isFill = !!it.fill;
+    return [
+        { key: "no", min: 8, text: r.no_transaksi || `id-${r.server_id}` },
+        { key: "total", min: 10, align: "right", text: rupiah(r.total) },
+        { key: "t", min: 9, align: "right", text: "T " + rupiah(r.tunai) },
+        { key: "nt", min: 9, align: "right", text: "NT " + rupiah(r.nontunai) },
+        { key: "pc", min: 5, flex: 1, text: it.pc_name || "" },
+        { key: "kat", min: 6, text: isFill ? "manual" : r.kategori || (r.bank ? r.bank : "") },
+    ];
+}
+export function LiveView({ onBack }) {
     const st = useRef({
         sessionId: null,
         pcs: [],
@@ -71,11 +105,11 @@ export function LiveView({ onView }) {
         if (!n)
             s.status = "--";
         else if (alive === n)
-            s.status = "BUKA·ok";
+            s.status = "OPEN";
         else if (!alive)
-            s.status = "PUTUS";
+            s.status = "DOWN";
         else
-            s.status = "BUKA·kurang";
+            s.status = "PARTIAL";
     }
     async function reload() {
         const s = st.current;
@@ -179,11 +213,11 @@ export function LiveView({ onView }) {
         const sess = await Store.createSession(picks);
         s.sessionId = sess.id;
         s.pcs = sess.pcs;
-        s.status = "kuras…";
+        s.status = "draining...";
         for (const p of picks)
             Comps.touch(p.id);
         await reload();
-        say(`sesi ${sess.id} dibuka (${sess.pcs.length} pc)`, "ok");
+        say(`session ${sess.id} opened (${sess.pcs.length} pc)`, "ok");
         await drain(my);
         if (my !== s.seq)
             return;
@@ -199,7 +233,7 @@ export function LiveView({ onView }) {
         if (s.sessionId) {
             const sess = await Store.getSession(s.sessionId);
             await Store.closeSession(s.sessionId, !!(sess && sess.complete));
-            say(`sesi ditutup${sess && !sess.complete ? " (belum lengkap)" : ""}`, "ok");
+            say(`session closed${sess && !sess.complete ? " (incomplete)" : ""}`, "ok");
             s.sessionId = null;
         }
         s.pcs = [];
@@ -223,9 +257,9 @@ export function LiveView({ onView }) {
             p.alive = 0;
             p.complete = 0;
         }
-        s.status = "kuras…";
+        s.status = "draining...";
         await reload();
-        say(`sesi ${id} dilanjutkan`, "ok");
+        say(`session ${id} resumed`, "ok");
         await drain(my);
         if (my !== s.seq)
             return;
@@ -235,7 +269,7 @@ export function LiveView({ onView }) {
     async function deleteSession(id) {
         const ok = await Store.deleteSession(id);
         const s = st.current;
-        say(ok ? "sesi dihapus" : "sesi open tak bisa dihapus", ok ? "ok" : "bad");
+        say(ok ? "session deleted" : "open session cannot be deleted", ok ? "ok" : "bad");
         s.pendingDelete = null;
         await reload();
     }
@@ -272,7 +306,7 @@ export function LiveView({ onView }) {
         s.picker = null;
         rerender();
         if (!picks.length) {
-            say("tak ada pc dipilih: batal.", "bad");
+            say("no pc selected: cancelled.", "bad");
             rerender();
             return;
         }
@@ -283,7 +317,7 @@ export function LiveView({ onView }) {
             for (const c of picks) {
                 const sess = await Store.addPc(s.sessionId, c);
                 if (!sess) {
-                    say("pc sudah ada di sesi.", "bad");
+                    say("pc already in session.", "bad");
                     continue;
                 }
                 Comps.touch(c.id);
@@ -302,7 +336,7 @@ export function LiveView({ onView }) {
         const ct = cleanNum(s.editT);
         const cn = cleanNum(s.editN);
         if (ct === null || cn === null) {
-            say("angka negatif tak valid.", "bad");
+            say("negative numbers are not valid.", "bad");
             rerender();
             return;
         }
@@ -316,20 +350,20 @@ export function LiveView({ onView }) {
             const fcomp = parts.join("|");
             const f = await Store.upsertFill(s.sessionId, fcomp, fday, fn, ct, cn);
             if (!f) {
-                say("isian tak valid.", "bad");
+                say("fill is not valid.", "bad");
                 rerender();
                 return;
             }
-            say("isian tersimpan.", "ok");
+            say("fill saved.", "ok");
         }
         else {
             const ok = await Store.patchTx(s.sessionId, s.editingTid, ct, cn);
             if (!ok) {
-                say("koreksi gagal.", "bad");
+                say("edit failed.", "bad");
                 rerender();
                 return;
             }
-            say("koreksi tersimpan.", "ok");
+            say("edit saved.", "ok");
         }
         s.editingTid = null;
         s.editingFill = null;
@@ -340,7 +374,7 @@ export function LiveView({ onView }) {
         if (!s.sessionId)
             return;
         const my = s.seq;
-        s.status = "coba…";
+        s.status = "retrying...";
         rerender();
         await drain(my);
         rerender();
@@ -358,7 +392,7 @@ export function LiveView({ onView }) {
                     p.complete = 0;
                 }
                 const my = ++s.seq;
-                s.status = "BUKA·kurang";
+                s.status = "PARTIAL";
                 await reload();
                 startTimer(my);
             }
@@ -370,10 +404,12 @@ export function LiveView({ onView }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
     const s = st.current;
+    const width = Math.max(20, dims.width - 2);
     const cursor = Math.min(Math.max(0, s.cursor), Math.max(0, s.items.length - 1));
-    const rowLines = Math.max(1, Math.floor((dims.height - 10) / 2));
-    const start = Math.max(0, Math.min(cursor - Math.floor(rowLines / 2), s.items.length - rowLines));
-    const visible = s.items.slice(start, start + rowLines);
+    const listLines = Math.max(1, Math.floor((dims.height - 13) / 1));
+    const start = Math.max(0, Math.min(cursor - Math.floor(listLines / 2), s.items.length - listLines));
+    const visible = s.items.slice(start, start + listLines);
+    const histCursor = Math.min(s.histCursor, Math.max(0, s.history.length - 1));
     useKeyboard((key) => {
         if (key.eventType === "release")
             return;
@@ -419,12 +455,12 @@ export function LiveView({ onView }) {
                 return;
             }
             if (p.list) {
-                if (key.name === "up") {
+                if (key.name === "up" || key.name === "k") {
                     p.cursor = Math.max(0, p.cursor - 1);
                     rerender();
                     return;
                 }
-                if (key.name === "down") {
+                if (key.name === "down" || key.name === "j") {
                     p.cursor = Math.min(p.list.length - 1, p.cursor + 1);
                     rerender();
                     return;
@@ -439,9 +475,8 @@ export function LiveView({ onView }) {
                 if (key.name === "return") {
                     if (p.mode === "add") {
                         const c = p.list[p.cursor];
-                        if (c) {
+                        if (c)
                             p.sel = { [c.id]: true };
-                        }
                     }
                     void confirmPicker();
                     return;
@@ -449,132 +484,133 @@ export function LiveView({ onView }) {
             }
             return;
         }
-        const v = viewKey(key.name);
-        if (v) {
-            if (v !== "live")
-                onView(v);
+        if (sx.sessionId) {
+            switch (key.name) {
+                case "up":
+                case "k":
+                    sx.cursor = Math.max(0, cursor - 1);
+                    rerender();
+                    break;
+                case "down":
+                case "j":
+                    sx.cursor = Math.min(Math.max(0, s.items.length - 1), cursor + 1);
+                    rerender();
+                    break;
+                case "x":
+                    void closeCurrent();
+                    break;
+                case "a":
+                    openPicker("add");
+                    break;
+                case "r":
+                    void retryNow();
+                    break;
+                case "e": {
+                    const it = s.items[cursor];
+                    if (!it)
+                        break;
+                    if (it.t === "hilang") {
+                        sx.editingFill = it.hkey;
+                        sx.editingTid = null;
+                        sx.editT = "";
+                        sx.editN = "";
+                        sx.editFocus = "t";
+                    }
+                    else if (it.t === "tx") {
+                        if (it.fill) {
+                            sx.editingFill = it.fill;
+                            sx.editingTid = null;
+                            sx.editT = String(it.r.tunai || 0);
+                            sx.editN = String(it.r.nontunai || 0);
+                            sx.editFocus = "t";
+                        }
+                        else {
+                            sx.editingTid = it.r.tid || null;
+                            sx.editingFill = null;
+                            sx.editT = String(it.r.tunai || 0);
+                            sx.editN = String(it.r.nontunai || 0);
+                            sx.editFocus = "t";
+                        }
+                    }
+                    rerender();
+                    break;
+                }
+                case "escape":
+                case "h":
+                    onBack();
+                    break;
+            }
             return;
         }
         switch (key.name) {
             case "up":
-                if (sx.sessionId)
-                    sx.cursor = Math.max(0, cursor - 1);
-                else
-                    sx.histCursor = Math.max(0, sx.histCursor - 1);
+            case "k":
+                sx.histCursor = Math.max(0, histCursor - 1);
                 rerender();
                 break;
             case "down":
-                if (sx.sessionId)
-                    sx.cursor = Math.min(Math.max(0, s.items.length - 1), cursor + 1);
-                else
-                    sx.histCursor = Math.min(Math.max(0, sx.history.length - 1), sx.histCursor + 1);
+            case "j":
+                sx.histCursor = Math.min(Math.max(0, sx.history.length - 1), histCursor + 1);
                 rerender();
                 break;
             case "o":
-                if (!sx.sessionId)
-                    openPicker("open");
-                break;
-            case "x":
-                if (sx.sessionId)
-                    void closeCurrent();
-                break;
-            case "a":
-                if (sx.sessionId)
-                    openPicker("add");
-                break;
-            case "r":
-                void retryNow();
+                openPicker("open");
                 break;
             case "return": {
-                if (!sx.sessionId) {
-                    const sess = sx.history[Math.min(sx.histCursor, Math.max(0, sx.history.length - 1))];
-                    if (sess && sess.status !== "open")
-                        void reopenSession(sess.id);
-                    else if (sess)
-                        say("sesi sudah aktif.", "dim");
-                    rerender();
-                }
-                break;
-            }
-            case "e": {
-                if (!sx.sessionId)
-                    break;
-                const it = s.items[cursor];
-                if (!it)
-                    break;
-                if (it.t === "hilang") {
-                    sx.editingFill = it.hkey;
-                    sx.editingTid = null;
-                    sx.editT = "";
-                    sx.editN = "";
-                    sx.editFocus = "t";
-                }
-                else if (it.t === "tx") {
-                    if (it.fill) {
-                        sx.editingFill = it.fill;
-                        sx.editingTid = null;
-                        sx.editT = String(it.r.tunai || 0);
-                        sx.editN = String(it.r.nontunai || 0);
-                        sx.editFocus = "t";
-                    }
-                    else {
-                        sx.editingTid = it.r.tid || null;
-                        sx.editingFill = null;
-                        sx.editT = String(it.r.tunai || 0);
-                        sx.editN = String(it.r.nontunai || 0);
-                        sx.editFocus = "t";
-                    }
-                }
+                const sess = sx.history[histCursor];
+                if (sess && sess.status !== "open")
+                    void reopenSession(sess.id);
+                else if (sess)
+                    say("session is already active.", "dim");
                 rerender();
                 break;
             }
             case "d": {
-                if (sx.sessionId)
-                    break;
-                const sess = sx.history[Math.min(sx.histCursor, Math.max(0, sx.history.length - 1))];
+                const sess = sx.history[histCursor];
                 if (!sess || sess.status === "open")
                     break;
                 if (sx.pendingDelete === sess.id)
                     void deleteSession(sess.id);
                 else {
                     sx.pendingDelete = sess.id;
-                    say("hapus sesi? d lagi = yakin.", "bad");
+                    say("delete session? press d again to confirm.", "bad");
                     rerender();
                 }
                 break;
             }
-            case "j":
-                if (!sx.sessionId) {
-                    sx.histCursor = Math.min(sx.history.length - 1, sx.histCursor + 1);
-                    rerender();
-                }
-                break;
-            case "k":
-                if (!sx.sessionId) {
-                    sx.histCursor = Math.max(0, sx.histCursor - 1);
-                    rerender();
-                }
+            case "escape":
+            case "h":
+                onBack();
                 break;
         }
     });
-    const banner = s.sessionId
-        ? `${s.pcs.length} pc · tx: ${s.totals.count} · tunai: ${rupiah(s.totals.tunai)} · nontunai: ${rupiah(s.totals.nontunai)} · semua: ${rupiah(s.totals.all)}`
-        : null;
-    return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsxs("box", { flexDirection: "row", gap: 2, children: [_jsx("text", { fg: s.status === "BUKA·ok" ? T.ok : s.status === "PUTUS" ? T.bad : T.dim, children: `[${s.status}]` }), _jsx("text", { fg: T.dim, children: s.sessionId ? pcLabel(s.pcs) : "belum ada sesi — o buka / enter lanjutkan riwayat" })] }), banner ? _jsx("text", { fg: T.dim, children: banner }) : null, _jsx("box", { flexGrow: 1, flexDirection: "column", paddingTop: 1, children: s.sessionId ? (!s.items.length ? (_jsx("text", { fg: T.faint, children: "\u2514\u2500 sesi ini belum ada transaksi." })) : (visible.map((it, i) => {
+    if (s.picker) {
+        const p = s.picker;
+        return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsx("text", { fg: T.text, attributes: TextAttributes.BOLD, children: p.mode === "open" ? "select computers — online only" : "add pc — online only" }), _jsx("box", { flexGrow: 1, flexDirection: "column", paddingTop: 1, children: p.list === null ? (_jsx("text", { fg: T.dim, children: "checking PCs..." })) : !p.list.length ? (_jsx("text", { fg: T.dim, children: "no PCs online. check wifi or add one in PCs (3)." })) : (p.list.map((c, i) => (_jsxs("box", { flexDirection: "row", children: [_jsx("text", { fg: i === p.cursor ? T.accent : T.faint, children: i === p.cursor ? ">" : " " }), _jsx("text", { fg: i === p.cursor ? T.text : T.dim, children: " " + clip(`${p.mode === "open" ? `[${p.sel[c.id] ? "x" : " "}] ` : ""}${c.name}  ${c.base}`, width - 2) })] }, c.id)))) }), _jsx("text", { fg: T.faint, children: clip(p.mode === "open" ? "space toggle · enter start · esc back" : "enter add · esc back", width) })] }));
+    }
+    if (!s.sessionId) {
+        return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsxs("box", { flexDirection: "row", justifyContent: "space-between", children: [_jsx("text", { fg: T.text, attributes: TextAttributes.BOLD, children: "session history" }), _jsx("text", { fg: T.faint, children: "o new session" })] }), _jsx("box", { flexGrow: 1, flexDirection: "column", paddingTop: 1, children: s.history.length ? (s.history.map((h, i) => {
+                        const on = i === histCursor;
+                        const spec = [
+                            { key: "state", min: 8, text: h.status === "open" ? "[open]" : "[closed]" },
+                            { key: "when", min: 16, text: String(h.started_at || "").replace("T", " ").slice(0, 16) },
+                            { key: "tx", min: 5, align: "right", text: `${h.count || 0} tx` },
+                            { key: "pcs", min: 5, flex: 1, text: pcLabel(h.pcs) },
+                            { key: "flag", min: 0, text: h.complete ? "" : "incomplete" },
+                        ];
+                        return _jsx(Row, { on: on, bad: !h.complete, width: width, spec: spec }, h.id);
+                    })) : (_jsx("text", { fg: T.faint, children: "history is empty \u2014 press o to open a session." })) }), _jsx(Msg, { text: s.msg.t, tone: s.msg.tone }), _jsx("text", { fg: T.faint, children: clip("j/k move · enter resume · d delete (2x) · o new · esc back", width) })] }));
+    }
+    const kpis = [
+        { label: "tx", value: String(s.totals.count) },
+        { label: "cash", value: rupiah(s.totals.tunai) },
+        { label: "noncash", value: rupiah(s.totals.nontunai) },
+        { label: "total", value: rupiah(s.totals.all) },
+    ];
+    return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsxs("box", { flexDirection: "row", justifyContent: "space-between", children: [_jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("text", { fg: T[statusTone(s.status)], attributes: TextAttributes.BOLD, children: `[${s.status}]` }), _jsx("text", { fg: T.dim, children: clip(pcLabel(s.pcs), Math.max(0, width - 12)) })] }), _jsx("text", { fg: T.faint, children: "x close session" })] }), _jsx(KpiGrid, { items: kpis, width: width }), _jsx("box", { flexGrow: 1, flexDirection: "column", paddingTop: 1, children: !s.items.length ? (_jsx("text", { fg: T.faint, children: "no transactions in this session yet." })) : (visible.map((it, i) => {
                     const idx = start + i;
                     const on = idx === cursor;
-                    if (it.t === "hilang") {
-                        return (_jsxs("box", { flexDirection: "column", children: [_jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx(Sel, { on: on }), _jsx("text", { fg: T.warn, children: `HILANG no ${padU(it.n, it.w)}` }), _jsx(Tag, { label: it.pc_name, tone: "dim" }), _jsx(Tag, { label: "HILANG", tone: "warn" })] }), _jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("text", { children: " " }), _jsx("text", { fg: T.faint, children: `${it.day} · tak ada di PC — e isi` })] })] }, "h" + it.hkey));
-                    }
-                    const r = it.r;
-                    const isFill = !!it.fill;
-                    const conf = sxEditRow(st.current, it);
-                    return (_jsxs("box", { flexDirection: "column", children: [_jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx(Sel, { on: on }), _jsx("text", { fg: on ? T.text : T.dim, children: isFill ? `MANUAL no ${padU(r.n || 0, it.w || 4)}` : r.no_transaksi || `id-${r.server_id}` }), _jsx(Tag, { label: it.pc_name, tone: "dim" }), isFill ? _jsx(Tag, { label: "MANUAL", tone: "warn" }) : _jsx(Tag, { label: r.kategori || "--", tone: "dim" }), r.edited ? _jsx(Tag, { label: "EDIT", tone: "accent" }) : null] }), conf ?? (_jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("text", { children: " " }), _jsx("text", { fg: T.dim, children: rupiah(r.total) }), _jsx("text", { fg: T.faint, children: `T: ${rupiah(r.tunai)} NT: ${rupiah(r.nontunai)}${r.bank ? " " + r.bank : ""}` }), _jsx("text", { fg: T.faint, children: isFill ? `${r.day || ""} · isian hp` : r.created_at || "" })] }))] }, it.fill || r.tid || "tx" + idx));
-                }))) : (_jsxs("box", { flexDirection: "column", children: [_jsx("text", { fg: T.faint, children: "\u2514\u2500 riwayat sesi (j/k pilih \u00B7 enter lanjut \u00B7 d hapus 2x)" }), s.history.length ? (s.history.map((h, i) => (_jsxs("box", { flexDirection: "column", children: [_jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx(Sel, { on: i === s.histCursor }), _jsx("text", { fg: i === s.histCursor ? T.text : T.dim, children: `${h.status === "open" ? "[buka]" : "[tutup]"} ${h.id}` }), !h.complete ? _jsx(Tag, { label: "belum lengkap", tone: "warn" }) : null, s.pendingDelete === h.id ? _jsx(Tag, { label: "yakin? d", tone: "bad" }) : null] }), _jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("text", { children: " " }), _jsx("text", { fg: T.faint, children: `${h.started_at || ""} · ${h.count || 0} tx · ${pcLabel(h.pcs)}` })] })] }, h.id)))) : (_jsx("text", { fg: T.faint, children: "\u2514\u2500 riwayat: kosong." }))] })) }), _jsx(Msg, { text: s.msg.t, tone: s.msg.tone }), s.picker ? (_jsx(Modal, { title: s.picker.mode === "open" ? "pilih computer · tersambung saja" : "tambah pc · tersambung saja", hint: "esc batal", widthPct: 70, heightPct: 60, children: _jsxs("box", { flexDirection: "column", children: [s.picker.list === null ? (_jsx("text", { fg: T.dim, children: "cek PC\u2026" })) : !s.picker.list.length ? (_jsx("text", { fg: T.dim, children: "tak ada PC tersambung. cek wifi atau tambah via view comp (4)." })) : (s.picker.list.map((c, i) => (_jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx(Sel, { on: i === s.picker?.cursor }), _jsx("text", { fg: T.text, children: s.picker?.mode === "open" ? `[${s.picker?.sel[c.id] ? "x" : " "}]` : "    " }), _jsx("text", { fg: i === s.picker?.cursor ? T.text : T.dim, children: c.name }), _jsx("text", { fg: T.faint, children: c.base })] }, c.id)))), _jsx("text", { fg: T.faint, children: s.picker.mode === "open" ? "space pilih · enter mulai" : "enter tambah · esc batal" })] }) })) : null] }));
-}
-function sxEditRow(s, it) {
-    const isEditing = s.editingFill ? s.editingFill === it.fill : s.editingTid !== null && s.editingTid === it.r.tid;
-    if (!isEditing)
-        return null;
-    return (_jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("text", { children: " " }), _jsx("text", { fg: s.editFocus === "t" ? T.text : T.dim, children: "T:" }), _jsx("text", { fg: T.text, children: s.editT + (s.editFocus === "t" ? "▏" : "") }), _jsx("text", { fg: s.editFocus === "n" ? T.text : T.dim, children: "NT:" }), _jsx("text", { fg: T.text, children: s.editN + (s.editFocus === "n" ? "▏" : "") }), _jsx("text", { fg: T.faint, children: "enter simpan · tab pindah · esc batal" })] }));
+                    const isEditing = it.t === "hilang" ? s.editingFill === it.hkey : it.fill ? s.editingFill === it.fill : s.editingTid !== null && s.editingTid === it.r.tid;
+                    return (_jsxs("box", { flexDirection: "column", children: [_jsx(Row, { on: on, bad: it.t === "hilang", width: width, spec: txSpec(it) }), isEditing ? (_jsxs("box", { flexDirection: "row", children: [_jsx("text", { children: " " }), _jsx("text", { fg: s.editFocus === "t" ? T.text : T.dim, children: "T:" }), _jsx("text", { fg: T.text, children: s.editT + (s.editFocus === "t" ? "█" : "") }), _jsx("text", { fg: s.editFocus === "n" ? T.text : T.dim, children: " NT:" }), _jsx("text", { fg: T.text, children: s.editN + (s.editFocus === "n" ? "█" : "") }), _jsx("text", { fg: T.faint, children: "  enter save · tab switch · esc cancel" })] })) : null] }, it.t === "hilang" ? "h" + it.hkey : it.fill || it.r.tid || "tx" + idx));
+                })) }), _jsx(Msg, { text: s.msg.t, tone: s.msg.tone })] }));
 }

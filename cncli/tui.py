@@ -461,26 +461,37 @@ def _tui_root():
     return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tui")
 
 
+def _try_runtime(cmd, cwd, label):
+    """Run one runtime candidate. Returns its exit code (0 = TUI ran fine)."""
+    try:
+        rc = subprocess.call(cmd, cwd=cwd)
+    except KeyboardInterrupt:
+        return 0
+    except OSError as exc:
+        print("tui: %s not usable (%s)" % (label, exc))
+        return 127
+    if rc != 0:
+        print("tui: %s exited %s, trying next runtime..." % (label, rc))
+    return rc
+
+
 def _launch_react_tui():
-    """Run the React TUI. Returns exit code, or None when no runtime found."""
+    """Run the React TUI. Returns 0 on success, last non-zero, or None."""
     root = _tui_root()
     dist = os.path.join(root, "dist", "index.js")
     src = os.path.join(root, "src", "index.tsx")
     node = shutil.which("node")
     bun = shutil.which("bun")
-    cands = []
+    last = None
     if node and os.path.isfile(dist):
-        cands.append([node, "--experimental-ffi", dist])
-    if bun and os.path.isfile(src):
-        cands.append([bun, src])
-    for cmd in cands:
-        try:
-            return subprocess.call(cmd, cwd=root)
-        except KeyboardInterrupt:
+        last = _try_runtime([node, "--experimental-ffi", dist], root, "node")
+        if last == 0:
             return 0
-        except OSError:
-            continue
-    return None
+    if bun and os.path.isfile(src):
+        last = _try_runtime([bun, src], root, "bun")
+        if last == 0:
+            return 0
+    return last
 
 
 _ACTIONS = {
@@ -530,6 +541,7 @@ def main():
             rc = _launch_react_tui()
             if rc == 0:
                 return 0
+            print("tui unavailable, using plain menu.")
     except Exception as exc:
         print("tui fallback: %s" % exc)
     try:
