@@ -44,7 +44,7 @@ function MenuBox({
       width="100%"
       border
       borderStyle="rounded"
-      borderColor={on ? T.accent : T.text}
+      borderColor={on ? T.accent : T.line}
       title={label}
       titleAlignment="left"
       titleColor={on ? T.accent : T.text}

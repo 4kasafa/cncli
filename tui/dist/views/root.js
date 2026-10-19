@@ -22,7 +22,7 @@ function Logo({ font }) {
     return (_jsx("box", { width: "100%", flexDirection: "row", justifyContent: "center", children: _jsx("ascii-font", { text: "CNCLI", font: font, color: color, backgroundColor: T.bg }) }));
 }
 function MenuBox({ label, lines, on, width, }) {
-    return (_jsx("box", { width: "100%", border: true, borderStyle: "rounded", borderColor: on ? T.accent : T.text, title: label, titleAlignment: "left", titleColor: on ? T.accent : T.text, paddingX: 1, children: lines.map((ln, i) => (_jsx("text", { fg: on ? T.text : T.dim, attributes: on ? TextAttributes.BOLD : undefined, children: clip(ln, Math.max(0, width - 6)) }, i))) }));
+    return (_jsx("box", { width: "100%", border: true, borderStyle: "rounded", borderColor: on ? T.accent : T.line, title: label, titleAlignment: "left", titleColor: on ? T.accent : T.text, paddingX: 1, children: lines.map((ln, i) => (_jsx("text", { fg: on ? T.text : T.dim, attributes: on ? TextAttributes.BOLD : undefined, children: clip(ln, Math.max(0, width - 6)) }, i))) }));
 }
 export function RootMenu({ data, sel, width, height, }) {
     const view = rootLines(data);
