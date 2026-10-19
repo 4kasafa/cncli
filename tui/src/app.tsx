@@ -14,6 +14,26 @@ import { pickLastRow, type RootData } from "./rootinfo.js";
 import * as Store from "./store.js";
 import * as Comps from "./comps.js";
 
+function JumpKeys({
+  textMode,
+  help,
+  onJump,
+}: {
+  textMode: boolean;
+  help: boolean;
+  onJump: (v: ViewId) => void;
+}) {
+  useKeyboard((key) => {
+    if (key.eventType === "release") return;
+    if (key.ctrl || key.meta) return;
+    if (textMode || help) return;
+    if (key.defaultPrevented) return;
+    const v = viewKey(key.name);
+    if (v) onJump(v);
+  });
+  return null;
+}
+
 export function App({ renderer }: { renderer: CliRenderer }) {
   const [view, setView] = useState<ViewId | null>(null);
   const [help, setHelp] = useState(false);
@@ -89,8 +109,6 @@ export function App({ renderer }: { renderer: CliRenderer }) {
       if (key.name === "down" || key.name === "j") return setSel((i) => Math.min(VIEWS.length - 1, i + 1));
       if (key.name === "return" || key.name === "enter" || key.name === "l") return setView(VIEWS[sel].id);
     }
-    const v = viewKey(key.name);
-    if (v) setView(v);
   });
 
   const label = view === null ? null : VIEWS.find((x) => x.id === view)?.label.toLowerCase() ?? view;
@@ -131,6 +149,7 @@ export function App({ renderer }: { renderer: CliRenderer }) {
           {view === "comp" ? <CompView onBack={() => setView(null)} onTextMode={setTextMode} /> : null}
         </box>
       )}
+      <JumpKeys key={(view ?? "root") + (help ? "-help" : "")} textMode={textMode} help={help} onJump={setView} />
       <Divider />
       <Hints items={help ? [["esc/q", "close"]] : view === null ? ROOT_HINTS : VIEW_HINTS[view]} />
     </box>

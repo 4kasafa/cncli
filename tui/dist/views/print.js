@@ -420,6 +420,7 @@ export function PrintView({ onBack, onTextMode }) {
                 break;
             default: {
                 if (!key.ctrl && !key.meta && key.sequence && key.sequence.length === 1 && /[0-9]/.test(key.sequence)) {
+                    key.preventDefault();
                     const d = DENOMS[sx.dcur];
                     sx.qty[d] = Math.min(9999, (sx.qty[d] || 0) * 10 + parseInt(key.sequence, 10));
                     saveMeta();

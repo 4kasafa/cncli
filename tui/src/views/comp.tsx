@@ -472,6 +472,7 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
         break;
       }
       case "d": {
+        key.preventDefault();
         const row = sx.list[cursor];
         if (!row) break;
         if (sx.pendingDel === row.id) void deleteAt(row.id);

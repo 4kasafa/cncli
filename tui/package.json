@@ -8,7 +8,8 @@
     "dev": "bun src/index.tsx",
     "build": "tsc -p .",
     "start": "node --experimental-ffi dist/index.js",
-    "test": "node --test \"test/*.test.ts\""
+    "test": "node --test \"test/*.test.ts\"",
+    "test:smoke": "bun test/keyguard.smoke.ts"
   },
   "dependencies": {
     "@opentui/core": "npm:@androidtui/core@0.6.6",

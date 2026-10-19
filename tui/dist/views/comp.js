@@ -453,6 +453,7 @@ export function CompView({ onBack, onTextMode }) {
                 break;
             }
             case "d": {
+                key.preventDefault();
                 const row = sx.list[cursor];
                 if (!row)
                     break;

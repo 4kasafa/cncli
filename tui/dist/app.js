@@ -13,6 +13,22 @@ import { clip } from "./layout.js";
 import { pickLastRow } from "./rootinfo.js";
 import * as Store from "./store.js";
 import * as Comps from "./comps.js";
+function JumpKeys({ textMode, help, onJump, }) {
+    useKeyboard((key) => {
+        if (key.eventType === "release")
+            return;
+        if (key.ctrl || key.meta)
+            return;
+        if (textMode || help)
+            return;
+        if (key.defaultPrevented)
+            return;
+        const v = viewKey(key.name);
+        if (v)
+            onJump(v);
+    });
+    return null;
+}
 export function App({ renderer }) {
     const [view, setView] = useState(null);
     const [help, setHelp] = useState(false);
@@ -94,11 +110,8 @@ export function App({ renderer }) {
             if (key.name === "return" || key.name === "enter" || key.name === "l")
                 return setView(VIEWS[sel].id);
         }
-        const v = viewKey(key.name);
-        if (v)
-            setView(v);
     });
     const label = view === null ? null : VIEWS.find((x) => x.id === view)?.label.toLowerCase() ?? view;
     const crumbs = help ? ["help"] : label ? [label] : [];
-    return (_jsxs("box", { width: "100%", height: "100%", flexDirection: "column", backgroundColor: T.bg, children: [view === null && !help ? null : (_jsxs(_Fragment, { children: [_jsxs("box", { height: 1, paddingX: 1, flexDirection: "row", justifyContent: "space-between", children: [_jsx(Breadcrumb, { parts: crumbs }), _jsx("text", { fg: T.dim, children: width < 54 ? "" : "esc/h back · q quit" })] }), _jsx(Divider, {})] })), help ? (_jsx("box", { flexGrow: 1, flexDirection: "column", paddingX: 1, children: HELP.map(([k, l], i) => k === "" ? (_jsx("text", { children: " " }, i)) : (_jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("box", { width: 9, children: _jsx("text", { fg: T.accent, children: clip(k, 9) }) }), _jsx("text", { fg: T.dim, children: clip(l, width - 12) })] }, i))) })) : (_jsxs("box", { flexGrow: 1, flexDirection: "column", paddingX: 1, children: [view === null ? _jsx(RootMenu, { data: data, sel: sel, width: width, height: height }) : null, view === "setoran" ? _jsx(SetoranView, { onBack: () => setView(null), onTextMode: setTextMode }) : null, view === "live" ? _jsx(LiveView, { onBack: () => setView(null) }) : null, view === "print" ? _jsx(PrintView, { onBack: () => setView(null), onTextMode: setTextMode }) : null, view === "comp" ? _jsx(CompView, { onBack: () => setView(null), onTextMode: setTextMode }) : null] })), _jsx(Divider, {}), _jsx(Hints, { items: help ? [["esc/q", "close"]] : view === null ? ROOT_HINTS : VIEW_HINTS[view] })] }));
+    return (_jsxs("box", { width: "100%", height: "100%", flexDirection: "column", backgroundColor: T.bg, children: [view === null && !help ? null : (_jsxs(_Fragment, { children: [_jsxs("box", { height: 1, paddingX: 1, flexDirection: "row", justifyContent: "space-between", children: [_jsx(Breadcrumb, { parts: crumbs }), _jsx("text", { fg: T.dim, children: width < 54 ? "" : "esc/h back · q quit" })] }), _jsx(Divider, {})] })), help ? (_jsx("box", { flexGrow: 1, flexDirection: "column", paddingX: 1, children: HELP.map(([k, l], i) => k === "" ? (_jsx("text", { children: " " }, i)) : (_jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("box", { width: 9, children: _jsx("text", { fg: T.accent, children: clip(k, 9) }) }), _jsx("text", { fg: T.dim, children: clip(l, width - 12) })] }, i))) })) : (_jsxs("box", { flexGrow: 1, flexDirection: "column", paddingX: 1, children: [view === null ? _jsx(RootMenu, { data: data, sel: sel, width: width, height: height }) : null, view === "setoran" ? _jsx(SetoranView, { onBack: () => setView(null), onTextMode: setTextMode }) : null, view === "live" ? _jsx(LiveView, { onBack: () => setView(null) }) : null, view === "print" ? _jsx(PrintView, { onBack: () => setView(null), onTextMode: setTextMode }) : null, view === "comp" ? _jsx(CompView, { onBack: () => setView(null), onTextMode: setTextMode }) : null] })), _jsx(JumpKeys, { textMode: textMode, help: help, onJump: setView }, (view ?? "root") + (help ? "-help" : "")), _jsx(Divider, {}), _jsx(Hints, { items: help ? [["esc/q", "close"]] : view === null ? ROOT_HINTS : VIEW_HINTS[view] })] }));
 }

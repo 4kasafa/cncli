@@ -439,6 +439,7 @@ export function LiveView({ onBack }) {
                 return;
             }
             if (!key.ctrl && !key.meta && key.sequence && key.sequence.length === 1 && /[0-9]/.test(key.sequence)) {
+                key.preventDefault();
                 if (sx.editFocus === "t")
                     sx.editT += key.sequence;
                 else
@@ -566,6 +567,7 @@ export function LiveView({ onBack }) {
                 break;
             }
             case "d": {
+                key.preventDefault();
                 const sess = sx.history[histCursor];
                 if (!sess || sess.status === "open")
                     break;
