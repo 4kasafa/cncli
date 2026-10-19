@@ -19,6 +19,25 @@ export function Sel({ on }: { on: boolean }) {
   return <text fg={on ? T.accent : T.faint}>{on ? "›" : " "}</text>;
 }
 
+export function Panel({ title, grow, children }: { title: string; grow?: boolean; children: ReactNode }) {
+  return (
+    <box
+      width="100%"
+      flexDirection="column"
+      border
+      borderStyle="rounded"
+      borderColor={T.accent}
+      title={title}
+      titleAlignment="left"
+      titleColor={T.accent}
+      paddingX={1}
+      flexGrow={grow ? 1 : 0}
+    >
+      {children}
+    </box>
+  );
+}
+
 export function Kpi({ label, value, tone = "text" }: { label: string; value: string; tone?: Tone }) {
   return (
     <box flexDirection="column">

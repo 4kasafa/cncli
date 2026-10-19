@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
 import { T } from "../theme.js";
-import { KpiGrid, Msg } from "../ui.js";
+import { KpiGrid, Msg, Panel } from "../ui.js";
 import { clip, formatRow, kpiCols } from "../layout.js";
 import * as Lan from "../lan.js";
 import * as Store from "../store.js";
@@ -32,9 +32,6 @@ function Row({ on, bad, width, spec, tone, }) {
     const marker = bad ? "!" : on ? ">" : " ";
     const fg = bad ? T.warn : on ? T.text : T[tone || "dim"];
     return (_jsxs("box", { flexDirection: "row", children: [_jsx("text", { fg: bad || on ? (bad ? T.warn : T.accent) : T.faint, children: marker }), _jsx("text", { fg: fg, attributes: on ? TextAttributes.BOLD : undefined, children: " " + line })] }));
-}
-function Panel({ title, grow, children, }) {
-    return (_jsx("box", { width: "100%", flexDirection: "column", border: true, borderStyle: "rounded", borderColor: T.accent, title: title, titleAlignment: "left", titleColor: T.accent, paddingX: 1, flexGrow: grow ? 1 : 0, children: children }));
 }
 function txSpec(it, compact) {
     const no = TxMerge.noUrutText(it);

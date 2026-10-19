@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
 import { T } from "../theme.js";
-import { KpiGrid, Msg } from "../ui.js";
+import { KpiGrid, Msg, Panel } from "../ui.js";
 import { clip, formatRow, kpiCols, type ColSpec } from "../layout.js";
 import * as Lan from "../lan.js";
 import * as Store from "../store.js";
@@ -74,33 +74,6 @@ function Row({
       <text fg={fg} attributes={on ? TextAttributes.BOLD : undefined}>
         {" " + line}
       </text>
-    </box>
-  );
-}
-
-function Panel({
-  title,
-  grow,
-  children,
-}: {
-  title: string;
-  grow?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <box
-      width="100%"
-      flexDirection="column"
-      border
-      borderStyle="rounded"
-      borderColor={T.accent}
-      title={title}
-      titleAlignment="left"
-      titleColor={T.accent}
-      paddingX={1}
-      flexGrow={grow ? 1 : 0}
-    >
-      {children}
     </box>
   );
 }

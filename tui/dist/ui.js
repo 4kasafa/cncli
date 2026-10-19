@@ -11,6 +11,9 @@ export function Tag({ label, tone = "dim" }) {
 export function Sel({ on }) {
     return _jsx("text", { fg: on ? T.accent : T.faint, children: on ? "›" : " " });
 }
+export function Panel({ title, grow, children }) {
+    return (_jsx("box", { width: "100%", flexDirection: "column", border: true, borderStyle: "rounded", borderColor: T.accent, title: title, titleAlignment: "left", titleColor: T.accent, paddingX: 1, flexGrow: grow ? 1 : 0, children: children }));
+}
 export function Kpi({ label, value, tone = "text" }) {
     return (_jsxs("box", { flexDirection: "column", children: [_jsx("text", { fg: T.faint, children: label }), _jsx("text", { fg: T[tone], attributes: TextAttributes.BOLD, children: value })] }));
 }

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
 import { T } from "../theme.js";
-import { Field, KpiGrid, Msg } from "../ui.js";
+import { Field, KpiGrid, Msg, Panel } from "../ui.js";
 import { clip, formatRow } from "../layout.js";
 import * as Lan from "../lan.js";
 import * as Store from "../store.js";
@@ -266,8 +266,9 @@ export function PrintView({ onBack, onTextMode }) {
     const fisik = fisikTotal(s.qty);
     const jual = fisik + s.noncash + s.expense;
     const diff = fisik - s.sysCash;
+    const innerWidth = Math.max(10, width - 4);
     const cols = width >= 72 ? 2 : 1;
-    const cellW = cols === 1 ? width : Math.floor((width - 2) / 2);
+    const cellW = cols === 1 ? innerWidth : Math.floor((innerWidth - 2) / 2);
     useKeyboard((key) => {
         if (key.eventType === "release")
             return;
@@ -477,11 +478,14 @@ export function PrintView({ onBack, onTextMode }) {
     const denomRows = [];
     for (let i = 0; i < DENOMS.length; i += cols)
         denomRows.push(DENOMS.slice(i, i + cols).map((_, j) => i + j));
-    return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsxs("box", { flexDirection: "row", justifyContent: "space-between", children: [_jsx("text", { fg: T.faint, children: clip(`${s.size}mm · ${s.sessionLabel}`, width - 14) }), _jsx("text", { fg: T.faint, children: "r refresh" })] }), _jsx(KpiGrid, { items: kpis, width: width }), _jsx("text", { fg: T.dim, children: clip(`${s.kasir || "-"} · ${s.cabang || "-"} · ${(s.shift || "-").toUpperCase()}${s.kasir_id ? " · " + s.kasir_id : ""}   (m edit)`, width) }), _jsx("box", { flexDirection: "column", paddingTop: 1, children: denomRows.map((row, ri) => (_jsx("box", { flexDirection: "row", gap: 2, children: row.map((di) => (_jsx("box", { flexDirection: "row", children: denomCell(DENOMS[di], di === s.dcur) }, DENOMS[di]))) }, ri))) }), s.expOpen ? (_jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("text", { fg: T.dim, children: "expense" }), _jsx("input", { backgroundColor: T.surface, textColor: T.text, focusedBackgroundColor: T.surface, placeholderColor: T.faint, focused: s.focus === "exp-amt", value: s.expAmt, placeholder: "0", width: 12, onInput: (v) => {
-                            st.current.expAmt = v.replace(/[^0-9]/g, "").replace(/^0+(?=\d)/, "");
-                            rerender();
-                        }, onSubmit: () => {
-                            st.current.focus = "exp-note";
-                            rerender();
-                        } }), _jsx(Field, { label: "note", value: s.expNote, focus: s.focus === "exp-note", width: 20, onInput: (v) => { st.current.expNote = v; }, onSubmit: () => closeExpense(true) }), _jsx("text", { fg: T.faint, children: "enter save · esc cancel" })] })) : (_jsx("text", { fg: T.dim, children: s.expense || s.note ? `expense: ${rupiah(s.expense)}${s.note ? " · " + s.note : ""}  (e edit)` : "expense: —  (e edit)" })), _jsx("box", { flexGrow: 1 }), _jsx(Msg, { text: s.msg.t, tone: s.msg.tone })] }));
+    const sizeTag = `[${s.size}mm]`;
+    const refreshHint = innerWidth < 40 ? "r" : "r refresh";
+    const headerRoom = Math.max(0, innerWidth - sizeTag.length - refreshHint.length - 2);
+    return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsxs(Panel, { title: "session", children: [_jsxs("box", { flexDirection: "row", justifyContent: "space-between", children: [_jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("text", { fg: T.accent, attributes: TextAttributes.BOLD, children: sizeTag }), _jsx("text", { fg: T.dim, children: clip(s.sessionLabel, headerRoom) })] }), _jsx("text", { fg: T.faint, children: refreshHint })] }), _jsx(KpiGrid, { items: kpis, width: innerWidth }), _jsx("text", { fg: T.dim, children: clip(`${s.kasir || "-"} · ${s.cabang || "-"} · ${(s.shift || "-").toUpperCase()}${s.kasir_id ? " · " + s.kasir_id : ""}   (m edit)`, innerWidth) })] }), _jsxs(Panel, { title: "denominations", grow: true, children: [_jsx("box", { flexGrow: 1, flexDirection: "column", children: denomRows.map((row, ri) => (_jsx("box", { flexDirection: "row", gap: 2, children: row.map((di) => (_jsx("box", { flexDirection: "row", children: denomCell(DENOMS[di], di === s.dcur) }, DENOMS[di]))) }, ri))) }), s.expOpen ? (_jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("text", { fg: T.dim, children: "expense" }), _jsx("input", { backgroundColor: T.surface, textColor: T.text, focusedBackgroundColor: T.surface, placeholderColor: T.faint, focused: s.focus === "exp-amt", value: s.expAmt, placeholder: "0", width: 12, onInput: (v) => {
+                                    st.current.expAmt = v.replace(/[^0-9]/g, "").replace(/^0+(?=\d)/, "");
+                                    rerender();
+                                }, onSubmit: () => {
+                                    st.current.focus = "exp-note";
+                                    rerender();
+                                } }), _jsx(Field, { label: "note", value: s.expNote, focus: s.focus === "exp-note", width: 20, onInput: (v) => { st.current.expNote = v; }, onSubmit: () => closeExpense(true) }), _jsx("text", { fg: T.faint, children: "enter save · esc cancel" })] })) : (_jsx("text", { fg: T.dim, children: clip(s.expense || s.note ? `expense: ${rupiah(s.expense)}${s.note ? " · " + s.note : ""}  (e edit)` : "expense: —  (e edit)", innerWidth) })), _jsx(Msg, { text: clip(s.msg.t, innerWidth), tone: s.msg.tone })] })] }));
 }

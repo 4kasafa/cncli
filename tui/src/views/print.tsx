@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
 import { T } from "../theme.js";
-import { Field, KpiGrid, Msg } from "../ui.js";
+import { Field, KpiGrid, Msg, Panel } from "../ui.js";
 import { clip, formatRow, type ColSpec } from "../layout.js";
 import * as Lan from "../lan.js";
 import * as Store from "../store.js";
@@ -299,8 +299,9 @@ export function PrintView({ onBack, onTextMode }: { onBack: () => void; onTextMo
   const fisik = fisikTotal(s.qty);
   const jual = fisik + s.noncash + s.expense;
   const diff = fisik - s.sysCash;
+  const innerWidth = Math.max(10, width - 4);
   const cols = width >= 72 ? 2 : 1;
-  const cellW = cols === 1 ? width : Math.floor((width - 2) / 2);
+  const cellW = cols === 1 ? innerWidth : Math.floor((innerWidth - 2) / 2);
 
   useKeyboard((key) => {
     if (key.eventType === "release") return;
@@ -580,55 +581,64 @@ export function PrintView({ onBack, onTextMode }: { onBack: () => void; onTextMo
 
   const denomRows: number[][] = [];
   for (let i = 0; i < DENOMS.length; i += cols) denomRows.push(DENOMS.slice(i, i + cols).map((_, j) => i + j));
+  const sizeTag = `[${s.size}mm]`;
+  const refreshHint = innerWidth < 40 ? "r" : "r refresh";
+  const headerRoom = Math.max(0, innerWidth - sizeTag.length - refreshHint.length - 2);
 
   return (
     <box flexDirection="column" flexGrow={1}>
-      <box flexDirection="row" justifyContent="space-between">
-        <text fg={T.faint}>{clip(`${s.size}mm · ${s.sessionLabel}`, width - 14)}</text>
-        <text fg={T.faint}>r refresh</text>
-      </box>
-      <KpiGrid items={kpis} width={width} />
-      <text fg={T.dim}>{clip(`${s.kasir || "-"} · ${s.cabang || "-"} · ${(s.shift || "-").toUpperCase()}${s.kasir_id ? " · " + s.kasir_id : ""}   (m edit)`, width)}</text>
-      <box flexDirection="column" paddingTop={1}>
-        {denomRows.map((row, ri) => (
-          <box key={ri} flexDirection="row" gap={2}>
-            {row.map((di) => (
-              <box key={DENOMS[di]} flexDirection="row">{denomCell(DENOMS[di], di === s.dcur)}</box>
-            ))}
+      <Panel title="session">
+        <box flexDirection="row" justifyContent="space-between">
+          <box flexDirection="row" gap={1}>
+            <text fg={T.accent} attributes={TextAttributes.BOLD}>{sizeTag}</text>
+            <text fg={T.dim}>{clip(s.sessionLabel, headerRoom)}</text>
           </box>
-        ))}
-      </box>
-      {s.expOpen ? (
-        <box flexDirection="row" gap={1}>
-          <text fg={T.dim}>expense</text>
-          <input
-            backgroundColor={T.surface}
-            textColor={T.text}
-            focusedBackgroundColor={T.surface}
-            placeholderColor={T.faint}
-            focused={s.focus === "exp-amt"}
-            value={s.expAmt}
-            placeholder="0"
-            width={12}
-            onInput={(v) => {
-              st.current.expAmt = v.replace(/[^0-9]/g, "").replace(/^0+(?=\d)/, "");
-              rerender();
-            }}
-            onSubmit={() => {
-              st.current.focus = "exp-note";
-              rerender();
-            }}
-          />
-          <Field label="note" value={s.expNote} focus={s.focus === "exp-note"} width={20} onInput={(v) => { st.current.expNote = v; }} onSubmit={() => closeExpense(true)} />
-          <text fg={T.faint}>{"enter save · esc cancel"}</text>
+          <text fg={T.faint}>{refreshHint}</text>
         </box>
-      ) : (
-        <text fg={T.dim}>
-          {s.expense || s.note ? `expense: ${rupiah(s.expense)}${s.note ? " · " + s.note : ""}  (e edit)` : "expense: —  (e edit)"}
-        </text>
-      )}
-      <box flexGrow={1} />
-      <Msg text={s.msg.t} tone={s.msg.tone} />
+        <KpiGrid items={kpis} width={innerWidth} />
+        <text fg={T.dim}>{clip(`${s.kasir || "-"} · ${s.cabang || "-"} · ${(s.shift || "-").toUpperCase()}${s.kasir_id ? " · " + s.kasir_id : ""}   (m edit)`, innerWidth)}</text>
+      </Panel>
+      <Panel title="denominations" grow>
+        <box flexGrow={1} flexDirection="column">
+          {denomRows.map((row, ri) => (
+            <box key={ri} flexDirection="row" gap={2}>
+              {row.map((di) => (
+                <box key={DENOMS[di]} flexDirection="row">{denomCell(DENOMS[di], di === s.dcur)}</box>
+              ))}
+            </box>
+          ))}
+        </box>
+        {s.expOpen ? (
+          <box flexDirection="row" gap={1}>
+            <text fg={T.dim}>expense</text>
+            <input
+              backgroundColor={T.surface}
+              textColor={T.text}
+              focusedBackgroundColor={T.surface}
+              placeholderColor={T.faint}
+              focused={s.focus === "exp-amt"}
+              value={s.expAmt}
+              placeholder="0"
+              width={12}
+              onInput={(v) => {
+                st.current.expAmt = v.replace(/[^0-9]/g, "").replace(/^0+(?=\d)/, "");
+                rerender();
+              }}
+              onSubmit={() => {
+                st.current.focus = "exp-note";
+                rerender();
+              }}
+            />
+            <Field label="note" value={s.expNote} focus={s.focus === "exp-note"} width={20} onInput={(v) => { st.current.expNote = v; }} onSubmit={() => closeExpense(true)} />
+            <text fg={T.faint}>{"enter save · esc cancel"}</text>
+          </box>
+        ) : (
+          <text fg={T.dim}>
+            {clip(s.expense || s.note ? `expense: ${rupiah(s.expense)}${s.note ? " · " + s.note : ""}  (e edit)` : "expense: —  (e edit)", innerWidth)}
+          </text>
+        )}
+        <Msg text={clip(s.msg.t, innerWidth)} tone={s.msg.tone} />
+      </Panel>
     </box>
   );
 }
