@@ -410,7 +410,9 @@ runtime/build hilang atau keluar non-nol -> fallback wizard plain
 (tidak pernah traceback). Runtime: node >= 26.4 ATAU bun >= 1.3.14.
 Setup sekali: `cd tui && npm install`; jalur node juga `npm run build`.
 
-Empat view ranger-style (gaya noir, tanpa blink), root page = 4 section:
+Empat view ranger-style (gaya noir, tanpa blink), root page = logo + tagline
+`cash note cli | vX` + 4 box berisi baris status per view (penuh di layar
+tinggi, tiap box jadi satu baris di layar pendek):
 - 1/s live     sesi buka/tutup/lanjut, tarik tx tiap 2 detik dari semua PC,
   baris missing (!) diisi manual, koreksi baris, riwayat sesi.
 - 2/p print    11 denominasi (navigasi up/down + ketik digit langsung),

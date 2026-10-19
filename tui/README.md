@@ -23,8 +23,11 @@ wizard fallback). Override state dir with `CNCLI_TUI_DIR` (default
 
 ## Views
 
-Ranger-style root page (logo + 4 boxes) → views: `1/s` live · `2/p` print ·
-`3/c` pcs · `4/d` reports. `enter`/`l` descend, `esc`/`h` ascend,
+Ranger-style root page (logo + tagline `cash note cli | vX` + 4 boxes) →
+views: `1/s` live · `2/p` print · `3/c` pcs · `4/d` reports. Root boxes
+show status lines: session totals + last tx, print meta, session PCs with
+ip, last report row. Tall screens show every line; short screens collapse
+each box to a single line. `enter`/`l` descend, `esc`/`h` ascend,
 `q` quit, `?` help page. Hints cap at 4 keys per screen; layout is safe
 at 40-60 cols (clipped single-line rows, boxes only on the root menu,
 adaptive KPI grid).
@@ -36,4 +39,5 @@ npm test    # node --test test/*.test.ts (tests run against dist/, build first)
 ```
 
 Pure-logic tests cover store (sessions/tx/fills), txmerge gap chains, conflict
-merge/resolve, and receipt width/validation; UI compiles under `npm run build`.
+merge/resolve, receipt width/validation, and root menu budget/lines; UI
+compiles under `npm run build`.

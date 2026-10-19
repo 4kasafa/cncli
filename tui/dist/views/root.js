@@ -4,30 +4,29 @@ import { TextAttributes } from "@opentui/core";
 import { T } from "../theme.js";
 import { VIEWS } from "../keymap.js";
 import { clip, rootBudget } from "../layout.js";
+import { contentRows, rootLines } from "../rootinfo.js";
 function pkgVersion() {
     try {
         const pkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"));
-        return String(pkg.version || "0.1.0");
+        return String(pkg.version || "0.4.1");
     }
     catch {
-        return "0.1.0";
+        return "0.4.1";
     }
 }
 const VERSION = pkgVersion();
-const TAGLINE = "termux-first cashier cli | v" + VERSION;
-const EMPTY_STATUS = new Set(["no session", "no meta", "none paired", "not logged in", "…"]);
-function statusTone(status) {
-    return EMPTY_STATUS.has(status) ? "dim" : "ok";
-}
-function Logo({ width, font }) {
+const TAGLINE = "cash note cli | v" + VERSION;
+const BOX_OF = { live: "live", print: "print", comp: "pcs", setoran: "reports" };
+function Logo({ font }) {
     const color = font === "tiny" ? T.accent : [T.accent, T.text];
     return (_jsx("box", { width: "100%", flexDirection: "row", justifyContent: "center", children: _jsx("ascii-font", { text: "CNCLI", font: font, color: color, backgroundColor: T.bg }) }));
 }
-function MenuBox({ label, status, on, width, }) {
-    return (_jsx("box", { width: "100%", border: true, borderStyle: "rounded", borderColor: on ? T.accent : T.line, title: label, titleAlignment: "left", titleColor: on ? T.accent : T.faint, paddingX: 1, children: _jsx("text", { fg: on ? T.text : T[statusTone(status)], attributes: on ? TextAttributes.BOLD : undefined, children: clip(status, Math.max(0, width - 6)) }) }));
+function MenuBox({ label, lines, tone, on, width, }) {
+    return (_jsx("box", { width: "100%", border: true, borderStyle: "rounded", borderColor: on ? T.accent : T.line, title: label, titleAlignment: "left", titleColor: on ? T.accent : T.faint, paddingX: 1, children: lines.map((ln, i) => (_jsx("text", { fg: on ? T.text : i === 0 ? T[tone] : T.dim, attributes: on && i === 0 ? TextAttributes.BOLD : undefined, children: clip(ln, Math.max(0, width - 6)) }, i))) }));
 }
-export function RootMenu({ sum, sel, width, height, }) {
-    const { font, tagline, gaps } = rootBudget(width, height);
+export function RootMenu({ data, sel, width, height, }) {
+    const view = rootLines(data);
+    const { font, tagline, gaps, compact } = rootBudget(width, height, contentRows(view));
     const rows = [];
     rows.push(tagline ? (_jsx("box", { width: "100%", flexDirection: "row", justifyContent: "center", children: _jsx("text", { fg: T.dim, children: clip(TAGLINE, Math.max(0, width - 2)) }) }, "tagline")) : null);
     if (gaps)
@@ -35,7 +34,9 @@ export function RootMenu({ sum, sel, width, height, }) {
     VIEWS.forEach((v, i) => {
         if (i > 0 && gaps)
             rows.push(_jsx("text", { children: " " }, "gap" + i));
-        rows.push(_jsx(MenuBox, { label: v.label.toLowerCase(), status: sum[v.id], on: sel === i, width: width }, v.id));
+        const key = BOX_OF[v.id];
+        const all = view.lines[key];
+        rows.push(_jsx(MenuBox, { label: v.label.toLowerCase(), lines: compact ? all.slice(0, 1) : all, tone: view.tone[key], on: sel === i, width: width }, v.id));
     });
-    return (_jsxs("box", { flexDirection: "column", flexGrow: 1, width: "100%", children: [font ? _jsx(Logo, { width: width, font: font }) : null, rows] }));
+    return (_jsxs("box", { flexDirection: "column", flexGrow: 1, width: "100%", children: [font ? _jsx(Logo, { font: font }) : null, rows] }));
 }

@@ -1,7 +1,7 @@
 {
   "name": "cncli-tui",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.4.1",
   "type": "module",
   "description": "cncli terminal TUI (OpenTUI React). Aliases @androidtui so the same imports work on Termux (android-arm64 .so) and desktop.",
   "scripts": {

@@ -70,19 +70,34 @@ export function pickLogoFont(width: number): "block" | "slick" | "tiny" {
   return "tiny";
 }
 
-export function rootBudget(
-  width: number,
-  height: number,
-): { font: "block" | "slick" | "tiny" | null; tagline: boolean; gaps: 0 | 1 } {
+export interface RootFit {
+  font: "block" | "slick" | "tiny" | null;
+  tagline: boolean;
+  gaps: 0 | 1;
+  compact: boolean;
+}
+
+export function capLines(list: string[], max: number): string[] {
+  if (max <= 0) return [];
+  if (list.length <= max) return list;
+  return [...list.slice(0, max), `+${list.length - max} lagi`];
+}
+
+// contentRows = total baris isi 4 box; compact meruntuhkan tiap box ke 1 baris (4 baris total)
+export function rootBudget(width: number, height: number, contentRows: number): RootFit {
   let font: "block" | "slick" | "tiny" | null = pickLogoFont(width);
   let tagline = true;
   let gaps: 0 | 1 = 1;
-  const needed = () => 2 + (font === null ? 0 : font === "tiny" ? 2 : 6) + (tagline ? 1 : 0) + (gaps ? 4 : 0) + 12;
-  while (needed() > height && !(font === null && !tagline && gaps === 0)) {
+  let compact = false;
+  const logoRows = () => (font === null ? 0 : font === "tiny" ? 2 : 6);
+  const needed = () => 2 + logoRows() + (tagline ? 1 : 0) + (gaps ? 4 : 0) + 8 + (compact ? 4 : Math.max(4, contentRows));
+  for (let i = 0; i < 5 && needed() > height; i++) {
     if (gaps === 1) gaps = 0;
     else if (tagline) tagline = false;
+    else if (!compact && contentRows > 4) compact = true;
     else if (font !== null && font !== "tiny") font = "tiny";
     else if (font === "tiny") font = null;
+    else break;
   }
-  return { font, tagline, gaps };
+  return { font, tagline, gaps, compact };
 }

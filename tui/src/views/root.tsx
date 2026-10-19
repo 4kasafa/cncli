@@ -1,28 +1,25 @@
 import { readFileSync } from "node:fs";
 import { TextAttributes } from "@opentui/core";
-import { T, type Tone } from "../theme.js";
+import { T } from "../theme.js";
 import { VIEWS, type ViewId } from "../keymap.js";
 import { clip, rootBudget } from "../layout.js";
+import { contentRows, rootLines, type BoxTone, type RootBox, type RootData } from "../rootinfo.js";
 
 function pkgVersion(): string {
   try {
     const pkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")) as { version?: string };
-    return String(pkg.version || "0.1.0");
+    return String(pkg.version || "0.4.1");
   } catch {
-    return "0.1.0";
+    return "0.4.1";
   }
 }
 
 const VERSION = pkgVersion();
-const TAGLINE = "termux-first cashier cli | v" + VERSION;
+const TAGLINE = "cash note cli | v" + VERSION;
 
-const EMPTY_STATUS = new Set(["no session", "no meta", "none paired", "not logged in", "…"]);
+const BOX_OF: Record<ViewId, RootBox> = { live: "live", print: "print", comp: "pcs", setoran: "reports" };
 
-function statusTone(status: string): Tone {
-  return EMPTY_STATUS.has(status) ? "dim" : "ok";
-}
-
-function Logo({ width, font }: { width: number; font: "block" | "slick" | "tiny" }) {
+function Logo({ font }: { font: "block" | "slick" | "tiny" }) {
   const color = font === "tiny" ? T.accent : [T.accent, T.text];
   return (
     <box width="100%" flexDirection="row" justifyContent="center">
@@ -33,12 +30,14 @@ function Logo({ width, font }: { width: number; font: "block" | "slick" | "tiny"
 
 function MenuBox({
   label,
-  status,
+  lines,
+  tone,
   on,
   width,
 }: {
   label: string;
-  status: string;
+  lines: string[];
+  tone: BoxTone;
   on: boolean;
   width: number;
 }) {
@@ -53,25 +52,32 @@ function MenuBox({
       titleColor={on ? T.accent : T.faint}
       paddingX={1}
     >
-      <text fg={on ? T.text : T[statusTone(status)]} attributes={on ? TextAttributes.BOLD : undefined}>
-        {clip(status, Math.max(0, width - 6))}
-      </text>
+      {lines.map((ln, i) => (
+        <text
+          key={i}
+          fg={on ? T.text : i === 0 ? T[tone] : T.dim}
+          attributes={on && i === 0 ? TextAttributes.BOLD : undefined}
+        >
+          {clip(ln, Math.max(0, width - 6))}
+        </text>
+      ))}
     </box>
   );
 }
 
 export function RootMenu({
-  sum,
+  data,
   sel,
   width,
   height,
 }: {
-  sum: Record<ViewId, string>;
+  data: RootData;
   sel: number;
   width: number;
   height: number;
 }) {
-  const { font, tagline, gaps } = rootBudget(width, height);
+  const view = rootLines(data);
+  const { font, tagline, gaps, compact } = rootBudget(width, height, contentRows(view));
   const rows: React.ReactNode[] = [];
   rows.push(
     tagline ? (
@@ -83,11 +89,22 @@ export function RootMenu({
   if (gaps) rows.push(<text key="spacer"> </text>);
   VIEWS.forEach((v, i) => {
     if (i > 0 && gaps) rows.push(<text key={"gap" + i}> </text>);
-    rows.push(<MenuBox key={v.id} label={v.label.toLowerCase()} status={sum[v.id]} on={sel === i} width={width} />);
+    const key = BOX_OF[v.id];
+    const all = view.lines[key];
+    rows.push(
+      <MenuBox
+        key={v.id}
+        label={v.label.toLowerCase()}
+        lines={compact ? all.slice(0, 1) : all}
+        tone={view.tone[key]}
+        on={sel === i}
+        width={width}
+      />,
+    );
   });
   return (
     <box flexDirection="column" flexGrow={1} width="100%">
-      {font ? <Logo width={width} font={font} /> : null}
+      {font ? <Logo font={font} /> : null}
       {rows}
     </box>
   );

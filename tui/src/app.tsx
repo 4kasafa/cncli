@@ -10,22 +10,16 @@ import { LiveView } from "./views/live.js";
 import { PrintView } from "./views/print.js";
 import { CompView } from "./views/comp.js";
 import { clip } from "./layout.js";
+import { pickLastRow, type RootData } from "./rootinfo.js";
 import * as Store from "./store.js";
 import * as Comps from "./comps.js";
-
-interface Summary {
-  live: string;
-  print: string;
-  comp: string;
-  setoran: string;
-}
 
 export function App({ renderer }: { renderer: CliRenderer }) {
   const [view, setView] = useState<ViewId | null>(null);
   const [help, setHelp] = useState(false);
   const [sel, setSel] = useState(0);
   const [textMode, setTextMode] = useState(false);
-  const [sum, setSum] = useState<Summary>({ live: "…", print: "…", comp: "…", setoran: "…" });
+  const [data, setData] = useState<RootData>({ session: null, print: null, paired: 0, report: null });
   const { width, height } = useTerminalDimensions();
 
   useEffect(() => {
@@ -36,16 +30,31 @@ export function App({ renderer }: { renderer: CliRenderer }) {
     let live = true;
     const tick = async () => {
       const s = await Store.openSessionOf();
+      let session: RootData["session"] = null;
+      if (s) {
+        const rows = await Store.listTx(s.id);
+        const fills = await Store.getFills(s.id);
+        let total = 0;
+        for (const r of rows) total += Store.toInt(r.total);
+        let fillCount = 0;
+        for (const k of Object.keys(fills)) {
+          total += Store.toInt(fills[k].total);
+          fillCount++;
+        }
+        const lt = rows[0];
+        session = {
+          pcs: (s.pcs || []).map((p) => ({ name: p.name || p.comp_id, base: p.base, alive: Store.toInt(p.alive) })),
+          tx: rows.length + fillCount,
+          total,
+          last: lt
+            ? { no: lt.no_transaksi || `id-${lt.server_id}`, total: Store.toInt(lt.total), time: String(lt.created_at || "").slice(11, 16) }
+            : null,
+        };
+      }
       const cred = Store.loadCreds();
-      const comps = Comps.list();
-      const m = Store.loadPrintMeta();
+      const report = cred ? pickLastRow(Store.loadArchiveBucket(cred.email, "").data) : null;
       if (!live) return;
-      setSum({
-        live: s ? `${(s.pcs || []).length} pc · ${s.count || 0} tx` : "no session",
-        print: m.kasir ? `${m.kasir} · shift ${m.shift || "-"}` : "no meta",
-        comp: comps.length ? `${comps.length} paired` : "none paired",
-        setoran: cred ? cred.email : "not logged in",
-      });
+      setData({ session, print: Store.loadPrintMeta(), paired: Comps.list().length, report });
     };
     void tick();
     const t = setInterval(() => void tick(), 5000);
@@ -113,7 +122,7 @@ export function App({ renderer }: { renderer: CliRenderer }) {
         </box>
       ) : (
         <box flexGrow={1} flexDirection="column" paddingX={1}>
-          {view === null ? <RootMenu sum={sum} sel={sel} width={width} height={height} /> : null}
+          {view === null ? <RootMenu data={data} sel={sel} width={width} height={height} /> : null}
           {view === "setoran" ? <SetoranView onBack={() => setView(null)} onTextMode={setTextMode} /> : null}
           {view === "live" ? <LiveView onBack={() => setView(null)} /> : null}
           {view === "print" ? <PrintView onBack={() => setView(null)} onTextMode={setTextMode} /> : null}
