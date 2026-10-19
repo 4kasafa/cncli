@@ -90,7 +90,8 @@ export function rootBudget(width: number, height: number, contentRows: number): 
   let gaps: 0 | 1 = 1;
   let compact = false;
   const logoRows = () => (font === null ? 0 : font === "tiny" ? 2 : 6);
-  const needed = () => 2 + logoRows() + (tagline ? 1 : 0) + (gaps ? 4 : 0) + 8 + (compact ? 4 : Math.max(4, contentRows));
+  const needed = () =>
+    2 + (font === null ? 0 : 1) + logoRows() + (tagline ? 1 : 0) + (gaps ? 4 : 0) + 8 + (compact ? 4 : Math.max(4, contentRows));
   for (let i = 0; i < 5 && needed() > height; i++) {
     if (gaps === 1) gaps = 0;
     else if (tagline) tagline = false;

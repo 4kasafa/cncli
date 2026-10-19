@@ -21,8 +21,8 @@ function Logo({ font }) {
     const color = font === "tiny" ? T.accent : [T.accent, T.text];
     return (_jsx("box", { width: "100%", flexDirection: "row", justifyContent: "center", children: _jsx("ascii-font", { text: "CNCLI", font: font, color: color, backgroundColor: T.bg }) }));
 }
-function MenuBox({ label, lines, tone, on, width, }) {
-    return (_jsx("box", { width: "100%", border: true, borderStyle: "rounded", borderColor: on ? T.accent : T.line, title: label, titleAlignment: "left", titleColor: on ? T.accent : T.faint, paddingX: 1, children: lines.map((ln, i) => (_jsx("text", { fg: on ? T.text : i === 0 ? T[tone] : T.dim, attributes: on && i === 0 ? TextAttributes.BOLD : undefined, children: clip(ln, Math.max(0, width - 6)) }, i))) }));
+function MenuBox({ label, lines, on, width, }) {
+    return (_jsx("box", { width: "100%", border: true, borderStyle: "rounded", borderColor: on ? T.accent : T.line, title: label, titleAlignment: "left", titleColor: on ? T.accent : T.faint, paddingX: 1, children: lines.map((ln, i) => (_jsx("text", { fg: on ? T.text : T.dim, attributes: on ? TextAttributes.BOLD : undefined, children: clip(ln, Math.max(0, width - 6)) }, i))) }));
 }
 export function RootMenu({ data, sel, width, height, }) {
     const view = rootLines(data);
@@ -36,7 +36,7 @@ export function RootMenu({ data, sel, width, height, }) {
             rows.push(_jsx("text", { children: " " }, "gap" + i));
         const key = BOX_OF[v.id];
         const all = view.lines[key];
-        rows.push(_jsx(MenuBox, { label: v.label.toLowerCase(), lines: compact ? all.slice(0, 1) : all, tone: view.tone[key], on: sel === i, width: width }, v.id));
+        rows.push(_jsx(MenuBox, { label: v.label.toLowerCase(), lines: compact ? all.slice(0, 1) : all, on: sel === i, width: width }, v.id));
     });
-    return (_jsxs("box", { flexDirection: "column", flexGrow: 1, width: "100%", children: [font ? _jsx(Logo, { font: font }) : null, rows] }));
+    return (_jsxs("box", { flexDirection: "column", flexGrow: 1, width: "100%", children: [font ? _jsx("text", { children: " " }, "topgap") : null, font ? _jsx(Logo, { font: font }) : null, rows] }));
 }

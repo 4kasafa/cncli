@@ -424,7 +424,7 @@ tinggi, tiap box jadi satu baris di layar pendek):
   konflik lokal/gas, ganti akun / sign out.
 
 Keys: `enter`/`l` turun, `esc`/`h` naik, `q` keluar, `Ctrl+C` keluar,
-`1-4` / `s p c d` jump (1/s live, 2/p print, 3/c pcs, 4/d reports),
+`1-4` / `s p c d` jump (1/s live, 2/p print, 3/c computers, 4/d reports),
 `?` help halaman penuh, `up/down` atau `j/k` navigasi baris.
 Layout aman 40-60 kolom: baris clip ellipsis (tanpa wrap), tanpa border
 kotak di sempit, KPI grid adaptif (3+2 sempit, satu baris lebar).

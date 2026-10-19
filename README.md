@@ -53,7 +53,7 @@ open, `esc/h` back, `q` quit:
 |-----|------|------|
 | 1 / s | Live | open/close/resume session, pulls tx every 2s, fill missing (!), fix rows, history |
 | 2 / p | Print | 11 denominations (digits type straight in), expense + note, 58/80 receipt preview, send to PC printer |
-| 3 / c | PCs | PC list + status, add/edit forms, control page: watcher/log/wipe (PIN on demand) |
+| 3 / c | Computers | PC list + status, add/edit forms, control page: watcher/log/wipe (PIN on demand) |
 | 4 / d | Deposits | GAS sign-in, archive cache-first, conflict diff page local/gas, account |
 | ? | help | full help page (`1-4` or `s p c d` jump anywhere) |
 

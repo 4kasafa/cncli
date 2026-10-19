@@ -2,7 +2,6 @@ import { parseDate, toInt, type GasItem } from "./conflict.js";
 import { capLines } from "./layout.js";
 import { rupiah } from "./fmt.js";
 
-export type BoxTone = "ok" | "dim" | "warn" | "bad";
 export type RootBox = "live" | "print" | "pcs" | "reports";
 
 export interface RootPc {
@@ -22,11 +21,11 @@ export interface RootData {
   print: { kasir?: string; kasir_id?: string; shift?: string; cabang?: string } | null;
   paired: number;
   report: GasItem | null;
+  sync: string | null;
 }
 
 export interface RootView {
   lines: Record<RootBox, string[]>;
-  tone: Record<RootBox, BoxTone>;
 }
 
 export function baseHost(base: string): string {
@@ -53,66 +52,68 @@ export function pickLastRow(data: GasItem[] | null | undefined): GasItem | null 
   return best;
 }
 
-function liveBox(s: RootData["session"]): { lines: string[]; tone: BoxTone } {
-  if (!s) return { lines: ["[close] no session"], tone: "dim" };
+function liveBox(s: RootData["session"]): string[] {
+  if (!s) return ["[close] no session"];
   let open = 0;
   for (const p of s.pcs) if (toInt(p.alive)) open++;
   const close = s.pcs.length - open;
-  const lines = [
-    `[open] ${s.pcs.length} pc · ${open} open ${close} close`,
+  const head = `[open] ${s.pcs.length} pc` + (s.pcs.length >= 2 ? ` · ${open} open ${close} close` : "");
+  return [
+    head,
     `${s.tx} tx · total ${rupiah(s.total)}`,
-    s.last ? `last: ${s.last.no} ${rupiah(s.last.total)}${s.last.time ? " · " + s.last.time : ""}` : "last: -",
+    s.last ? `${s.last.no} ${rupiah(s.last.total)}${s.last.time ? " · " + s.last.time : ""}` : "-",
   ];
-  return { lines, tone: "ok" };
 }
 
-function printBox(m: RootData["print"]): { lines: string[]; tone: BoxTone } {
-  if (!m || !(m.kasir || m.kasir_id || m.shift || m.cabang)) return { lines: ["no meta"], tone: "dim" };
-  const v = (x?: string) => (x && String(x).trim()) || "-";
-  return {
-    lines: [`kasir: ${v(m.kasir)}`, `id: ${v(m.kasir_id)}`, `shift: ${v(m.shift)}`, `cabang: ${v(m.cabang)}`],
-    tone: "ok",
-  };
+function printBox(m: RootData["print"]): string[] {
+  const v = (x?: string) => String(x == null ? "" : x).trim() || "-";
+  const kasir = v(m?.kasir);
+  const id = v(m?.kasir_id);
+  const cabang = v(m?.cabang);
+  const shift = v(m?.shift);
+  if (kasir === "-" && id === "-" && cabang === "-" && shift === "-") return ["no meta"];
+  return [`${kasir} · ${id}`, `${cabang} · ${shift}`];
 }
 
-function pcsBox(d: RootData): { lines: string[]; tone: BoxTone } {
+function pcsBox(d: RootData): string[] {
   const act = d.session ? d.session.pcs : [];
-  if (!act.length) return { lines: [d.paired ? `${d.paired} paired · 0 aktif` : "none paired"], tone: "dim" };
+  if (!act.length) return [d.paired ? `${d.paired} paired · 0 aktif` : "none paired"];
   const names = act.map((p) => `${p.name} ${baseHost(p.base)}`);
-  return { lines: [`${d.paired} paired · ${act.length} aktif`, ...capLines(names, 4)], tone: "ok" };
+  return [`${d.paired} paired · ${act.length} aktif`, ...capLines(names, 4)];
 }
 
-// ponytail: tone reports ikut konvensi setoran (short bad, over ok, even dim)
-function reportStatus(row: GasItem): { text: string; tone: BoxTone } {
+function fmtDay(d: Date | null): string {
+  if (!d || isNaN(d.getTime())) return "-";
+  const p = (n: number) => (n < 10 ? "0" : "") + n;
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+function syncText(s: string | null): string {
+  const v = String(s == null ? "" : s).trim();
+  return v ? v.slice(0, 16) : "-";
+}
+
+function reportStatus(row: GasItem): string {
   const stv = String(row.statusSelisih || "").toUpperCase();
   const v = toInt(row.jumlahSelisih);
-  if (stv === "KURANG" || v < 0) return { text: `short ${rupiah(Math.abs(v))}`, tone: "bad" };
-  if (stv === "LEBIH" || v > 0) return { text: `over ${rupiah(Math.abs(v))}`, tone: "ok" };
-  return { text: "even", tone: "dim" };
+  if (stv === "KURANG" || v < 0) return `short ${rupiah(Math.abs(v))}`;
+  if (stv === "LEBIH" || v > 0) return `over ${rupiah(Math.abs(v))}`;
+  return "even";
 }
 
-function reportBox(row: GasItem | null): { lines: string[]; tone: BoxTone } {
-  if (!row) return { lines: ["no data"], tone: "dim" };
-  const st = reportStatus(row);
-  return {
-    lines: [
-      `tgl: ${String(row.tanggal || "-")}`,
-      `total komputer: ${rupiah(row.totalKomputer)}`,
-      `total fisik: ${rupiah(row.uangFisik)}`,
-      st.text,
-    ],
-    tone: st.tone,
-  };
+function reportBox(d: RootData): string[] {
+  const row = d.report;
+  if (!row) return ["no data"];
+  return [
+    `${fmtDay(parseDate(row.tanggal))} · ${reportStatus(row)}`,
+    `K: ${rupiah(row.totalKomputer)} · F: ${rupiah(row.uangFisik)}`,
+    syncText(d.sync),
+  ];
 }
 
 export function rootLines(d: RootData): RootView {
-  const live = liveBox(d.session);
-  const print = printBox(d.print);
-  const pcs = pcsBox(d);
-  const reports = reportBox(d.report);
   return {
-    lines: { live: live.lines, print: print.lines, pcs: pcs.lines, reports: reports.lines },
-    tone: { live: live.tone, print: print.tone, pcs: pcs.tone, reports: reports.tone },
+    lines: { live: liveBox(d.session), print: printBox(d.print), pcs: pcsBox(d), reports: reportBox(d) },
   };
 }
 

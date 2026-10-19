@@ -24,10 +24,11 @@ wizard fallback). Override state dir with `CNCLI_TUI_DIR` (default
 ## Views
 
 Ranger-style root page (logo + tagline `cash note cli | vX` + 4 boxes) →
-views: `1/s` live · `2/p` print · `3/c` pcs · `4/d` reports. Root boxes
-show status lines: session totals + last tx, print meta, session PCs with
-ip, last report row. Tall screens show every line; short screens collapse
-each box to a single line. `enter`/`l` descend, `esc`/`h` ascend,
+views: `1/s` live · `2/p` print · `3/c` computers · `4/d` reports. Root
+boxes show: session head + tx total + last tx, print kasir/cabang in two
+lines, session computers with ip, last report (date/status, K/F totals,
+sync time). Tall screens show every line; short screens collapse each box
+to a single line. `enter`/`l` descend, `esc`/`h` ascend,
 `q` quit, `?` help page. Hints cap at 4 keys per screen; layout is safe
 at 40-60 cols (clipped single-line rows, boxes only on the root menu,
 adaptive KPI grid).

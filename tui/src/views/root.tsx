@@ -3,7 +3,7 @@ import { TextAttributes } from "@opentui/core";
 import { T } from "../theme.js";
 import { VIEWS, type ViewId } from "../keymap.js";
 import { clip, rootBudget } from "../layout.js";
-import { contentRows, rootLines, type BoxTone, type RootBox, type RootData } from "../rootinfo.js";
+import { contentRows, rootLines, type RootBox, type RootData } from "../rootinfo.js";
 
 function pkgVersion(): string {
   try {
@@ -31,13 +31,11 @@ function Logo({ font }: { font: "block" | "slick" | "tiny" }) {
 function MenuBox({
   label,
   lines,
-  tone,
   on,
   width,
 }: {
   label: string;
   lines: string[];
-  tone: BoxTone;
   on: boolean;
   width: number;
 }) {
@@ -55,8 +53,8 @@ function MenuBox({
       {lines.map((ln, i) => (
         <text
           key={i}
-          fg={on ? T.text : i === 0 ? T[tone] : T.dim}
-          attributes={on && i === 0 ? TextAttributes.BOLD : undefined}
+          fg={on ? T.text : T.dim}
+          attributes={on ? TextAttributes.BOLD : undefined}
         >
           {clip(ln, Math.max(0, width - 6))}
         </text>
@@ -96,7 +94,6 @@ export function RootMenu({
         key={v.id}
         label={v.label.toLowerCase()}
         lines={compact ? all.slice(0, 1) : all}
-        tone={view.tone[key]}
         on={sel === i}
         width={width}
       />,
@@ -104,6 +101,7 @@ export function RootMenu({
   });
   return (
     <box flexDirection="column" flexGrow={1} width="100%">
+      {font ? <text key="topgap"> </text> : null}
       {font ? <Logo font={font} /> : null}
       {rows}
     </box>

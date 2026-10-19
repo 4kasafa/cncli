@@ -19,7 +19,7 @@ export function App({ renderer }: { renderer: CliRenderer }) {
   const [help, setHelp] = useState(false);
   const [sel, setSel] = useState(0);
   const [textMode, setTextMode] = useState(false);
-  const [data, setData] = useState<RootData>({ session: null, print: null, paired: 0, report: null });
+  const [data, setData] = useState<RootData>({ session: null, print: null, paired: 0, report: null, sync: null });
   const { width, height } = useTerminalDimensions();
 
   useEffect(() => {
@@ -52,9 +52,11 @@ export function App({ renderer }: { renderer: CliRenderer }) {
         };
       }
       const cred = Store.loadCreds();
-      const report = cred ? pickLastRow(Store.loadArchiveBucket(cred.email, "").data) : null;
+      const bucket = cred ? Store.loadArchiveBucket(cred.email, "") : null;
+      const report = bucket ? pickLastRow(bucket.data) : null;
+      const sync = bucket?.last_sync ?? null;
       if (!live) return;
-      setData({ session, print: Store.loadPrintMeta(), paired: Comps.list().length, report });
+      setData({ session, print: Store.loadPrintMeta(), paired: Comps.list().length, report, sync });
     };
     void tick();
     const t = setInterval(() => void tick(), 5000);

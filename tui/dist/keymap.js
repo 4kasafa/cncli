@@ -1,7 +1,7 @@
 export const VIEWS = [
     { id: "live", key: "1", label: "live" },
     { id: "print", key: "2", label: "print" },
-    { id: "comp", key: "3", label: "pcs" },
+    { id: "comp", key: "3", label: "computers" },
     { id: "setoran", key: "4", label: "reports" },
 ];
 export function viewKey(name) {
@@ -56,7 +56,7 @@ export const VIEW_HINTS = {
 };
 export const HELP = [
     ["nav", "enter / l open · esc / h back · up/down or j/k move"],
-    ["jump", "1/s live · 2/p print · 3/c pcs · 4/d reports"],
+    ["jump", "1/s live · 2/p print · 3/c computers · 4/d reports"],
     ["live", "enter session · e edit row · a add pc · r retry · d delete · x close"],
     ["print", "m meta · p preview · k send · v 58/80 · e expense · b clear"],
     ["comp", "enter control · a add · e edit · d delete · r check"],

@@ -28,67 +28,68 @@ export function pickLastRow(data) {
 }
 function liveBox(s) {
     if (!s)
-        return { lines: ["[close] no session"], tone: "dim" };
+        return ["[close] no session"];
     let open = 0;
     for (const p of s.pcs)
         if (toInt(p.alive))
             open++;
     const close = s.pcs.length - open;
-    const lines = [
-        `[open] ${s.pcs.length} pc · ${open} open ${close} close`,
+    const head = `[open] ${s.pcs.length} pc` + (s.pcs.length >= 2 ? ` · ${open} open ${close} close` : "");
+    return [
+        head,
         `${s.tx} tx · total ${rupiah(s.total)}`,
-        s.last ? `last: ${s.last.no} ${rupiah(s.last.total)}${s.last.time ? " · " + s.last.time : ""}` : "last: -",
+        s.last ? `${s.last.no} ${rupiah(s.last.total)}${s.last.time ? " · " + s.last.time : ""}` : "-",
     ];
-    return { lines, tone: "ok" };
 }
 function printBox(m) {
-    if (!m || !(m.kasir || m.kasir_id || m.shift || m.cabang))
-        return { lines: ["no meta"], tone: "dim" };
-    const v = (x) => (x && String(x).trim()) || "-";
-    return {
-        lines: [`kasir: ${v(m.kasir)}`, `id: ${v(m.kasir_id)}`, `shift: ${v(m.shift)}`, `cabang: ${v(m.cabang)}`],
-        tone: "ok",
-    };
+    const v = (x) => String(x == null ? "" : x).trim() || "-";
+    const kasir = v(m?.kasir);
+    const id = v(m?.kasir_id);
+    const cabang = v(m?.cabang);
+    const shift = v(m?.shift);
+    if (kasir === "-" && id === "-" && cabang === "-" && shift === "-")
+        return ["no meta"];
+    return [`${kasir} · ${id}`, `${cabang} · ${shift}`];
 }
 function pcsBox(d) {
     const act = d.session ? d.session.pcs : [];
     if (!act.length)
-        return { lines: [d.paired ? `${d.paired} paired · 0 aktif` : "none paired"], tone: "dim" };
+        return [d.paired ? `${d.paired} paired · 0 aktif` : "none paired"];
     const names = act.map((p) => `${p.name} ${baseHost(p.base)}`);
-    return { lines: [`${d.paired} paired · ${act.length} aktif`, ...capLines(names, 4)], tone: "ok" };
+    return [`${d.paired} paired · ${act.length} aktif`, ...capLines(names, 4)];
 }
-// ponytail: tone reports ikut konvensi setoran (short bad, over ok, even dim)
+function fmtDay(d) {
+    if (!d || isNaN(d.getTime()))
+        return "-";
+    const p = (n) => (n < 10 ? "0" : "") + n;
+    return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+function syncText(s) {
+    const v = String(s == null ? "" : s).trim();
+    return v ? v.slice(0, 16) : "-";
+}
 function reportStatus(row) {
     const stv = String(row.statusSelisih || "").toUpperCase();
     const v = toInt(row.jumlahSelisih);
     if (stv === "KURANG" || v < 0)
-        return { text: `short ${rupiah(Math.abs(v))}`, tone: "bad" };
+        return `short ${rupiah(Math.abs(v))}`;
     if (stv === "LEBIH" || v > 0)
-        return { text: `over ${rupiah(Math.abs(v))}`, tone: "ok" };
-    return { text: "even", tone: "dim" };
+        return `over ${rupiah(Math.abs(v))}`;
+    return "even";
 }
-function reportBox(row) {
+function reportBox(d) {
+    const row = d.report;
     if (!row)
-        return { lines: ["no data"], tone: "dim" };
-    const st = reportStatus(row);
-    return {
-        lines: [
-            `tgl: ${String(row.tanggal || "-")}`,
-            `total komputer: ${rupiah(row.totalKomputer)}`,
-            `total fisik: ${rupiah(row.uangFisik)}`,
-            st.text,
-        ],
-        tone: st.tone,
-    };
+        return ["no data"];
+    return [
+        `${fmtDay(parseDate(row.tanggal))} · ${reportStatus(row)}`,
+        `K: ${rupiah(row.totalKomputer)} · F: ${rupiah(row.uangFisik)}`,
+        syncText(d.sync),
+    ];
 }
 export function rootLines(d) {
-    const live = liveBox(d.session);
-    const print = printBox(d.print);
-    const pcs = pcsBox(d);
-    const reports = reportBox(d.report);
     return {
-        lines: { live: live.lines, print: print.lines, pcs: pcs.lines, reports: reports.lines },
-        tone: { live: live.tone, print: print.tone, pcs: pcs.tone, reports: reports.tone },
+        lines: { live: liveBox(d.session), print: printBox(d.print), pcs: pcsBox(d), reports: reportBox(d) },
     };
 }
 export function contentRows(v) {
