@@ -84,7 +84,7 @@ export function capLines(list: string[], max: number): string[] {
 }
 
 // contentRows = total baris isi 4 box; compact meruntuhkan tiap box ke 1 baris (4 baris total).
-// chrome 16 = 4 box x (2 border + 2 padding vertikal).
+// chrome 12 = 4 box x (2 border + 1 padding atas).
 export function rootBudget(width: number, height: number, contentRows: number): RootFit {
   let font: "block" | "slick" | "tiny" | null = pickLogoFont(width);
   let tagline = true;
@@ -97,7 +97,7 @@ export function rootBudget(width: number, height: number, contentRows: number): 
     logoRows() +
     (tagline ? 1 : 0) +
     (gaps ? 4 : 0) +
-    16 +
+    12 +
     (compact ? 4 : Math.max(4, contentRows));
   for (let i = 0; i < 5 && needed() > height; i++) {
     if (gaps === 1) gaps = 0;

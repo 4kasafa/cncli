@@ -13,35 +13,35 @@ test("pickLogoFont: ambang 46/32", () => {
 });
 
 test("rootBudget: tangga tinggi width 80, contentRows 13 (penuh terburuk)", () => {
-  assert.deepEqual(rootBudget(80, 43, 13), { font: "block", tagline: true, gaps: 1, compact: false });
-  assert.deepEqual(rootBudget(80, 39, 13), { font: "block", tagline: true, gaps: 0, compact: false });
-  assert.deepEqual(rootBudget(80, 38, 13), { font: "block", tagline: false, gaps: 0, compact: false });
-  assert.deepEqual(rootBudget(80, 37, 13), { font: "block", tagline: false, gaps: 0, compact: true });
-  assert.deepEqual(rootBudget(80, 29, 13), { font: "block", tagline: false, gaps: 0, compact: true });
-  assert.deepEqual(rootBudget(80, 28, 13), { font: "tiny", tagline: false, gaps: 0, compact: true });
-  assert.deepEqual(rootBudget(80, 25, 13), { font: "tiny", tagline: false, gaps: 0, compact: true });
-  assert.deepEqual(rootBudget(80, 24, 13), { font: null, tagline: false, gaps: 0, compact: true });
-  assert.deepEqual(rootBudget(80, 22, 13), { font: null, tagline: false, gaps: 0, compact: true });
+  assert.deepEqual(rootBudget(80, 39, 13), { font: "block", tagline: true, gaps: 1, compact: false });
+  assert.deepEqual(rootBudget(80, 35, 13), { font: "block", tagline: true, gaps: 0, compact: false });
+  assert.deepEqual(rootBudget(80, 34, 13), { font: "block", tagline: false, gaps: 0, compact: false });
+  assert.deepEqual(rootBudget(80, 33, 13), { font: "block", tagline: false, gaps: 0, compact: true });
+  assert.deepEqual(rootBudget(80, 25, 13), { font: "block", tagline: false, gaps: 0, compact: true });
+  assert.deepEqual(rootBudget(80, 24, 13), { font: "tiny", tagline: false, gaps: 0, compact: true });
+  assert.deepEqual(rootBudget(80, 21, 13), { font: "tiny", tagline: false, gaps: 0, compact: true });
+  assert.deepEqual(rootBudget(80, 20, 13), { font: null, tagline: false, gaps: 0, compact: true });
+  assert.deepEqual(rootBudget(80, 18, 13), { font: null, tagline: false, gaps: 0, compact: true });
 });
 
 test("rootBudget: contentRows 4 tidak pernah compact", () => {
-  assert.deepEqual(rootBudget(80, 34, 4), { font: "block", tagline: true, gaps: 1, compact: false });
-  assert.deepEqual(rootBudget(80, 30, 4), { font: "block", tagline: true, gaps: 0, compact: false });
-  assert.deepEqual(rootBudget(80, 29, 4), { font: "block", tagline: false, gaps: 0, compact: false });
-  assert.deepEqual(rootBudget(80, 28, 4), { font: "tiny", tagline: false, gaps: 0, compact: false });
-  assert.deepEqual(rootBudget(80, 25, 4), { font: "tiny", tagline: false, gaps: 0, compact: false });
-  assert.deepEqual(rootBudget(80, 24, 4), { font: null, tagline: false, gaps: 0, compact: false });
-  assert.deepEqual(rootBudget(80, 22, 4), { font: null, tagline: false, gaps: 0, compact: false });
+  assert.deepEqual(rootBudget(80, 30, 4), { font: "block", tagline: true, gaps: 1, compact: false });
+  assert.deepEqual(rootBudget(80, 26, 4), { font: "block", tagline: true, gaps: 0, compact: false });
+  assert.deepEqual(rootBudget(80, 25, 4), { font: "block", tagline: false, gaps: 0, compact: false });
+  assert.deepEqual(rootBudget(80, 24, 4), { font: "tiny", tagline: false, gaps: 0, compact: false });
+  assert.deepEqual(rootBudget(80, 21, 4), { font: "tiny", tagline: false, gaps: 0, compact: false });
+  assert.deepEqual(rootBudget(80, 20, 4), { font: null, tagline: false, gaps: 0, compact: false });
+  assert.deepEqual(rootBudget(80, 18, 4), { font: null, tagline: false, gaps: 0, compact: false });
 });
 
 test("rootBudget: font ikut lebar", () => {
-  assert.equal(rootBudget(45, 43, 13).font, "slick");
-  assert.equal(rootBudget(31, 43, 13).font, "tiny");
-  assert.deepEqual(rootBudget(40, 43, 13), { font: "slick", tagline: true, gaps: 1, compact: false });
+  assert.equal(rootBudget(45, 39, 13).font, "slick");
+  assert.equal(rootBudget(31, 39, 13).font, "tiny");
+  assert.deepEqual(rootBudget(40, 39, 13), { font: "slick", tagline: true, gaps: 1, compact: false });
 });
 
 test("rootBudget: kombinasi acak tidak pernah crash dan flag valid", () => {
-  for (const h of [10, 14, 16, 22, 29, 37, 43, 50]) {
+  for (const h of [10, 14, 18, 25, 33, 39, 50]) {
     for (const w of [20, 31, 32, 45, 46, 80]) {
       for (const cr of [4, 12, 13]) {
         const b = rootBudget(w, h, cr);
