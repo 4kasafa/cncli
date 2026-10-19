@@ -423,7 +423,7 @@ export function LiveView({ onBack }) {
     const width = Math.max(20, dims.width - 2);
     const innerWidth = Math.max(10, width - 4);
     const kpiRows = Math.ceil(4 / kpiCols(innerWidth));
-    const listLines = Math.max(1, dims.height - 11 - 2 * kpiRows);
+    const listLines = Math.max(1, dims.height - 10 - 2 * kpiRows);
     const cursor = Math.min(Math.max(0, s.cursor), Math.max(0, s.items.length - 1));
     const start = Math.max(0, Math.min(cursor - Math.floor(listLines / 2), s.items.length - listLines));
     const visible = s.items.slice(start, start + listLines);
@@ -629,7 +629,7 @@ export function LiveView({ onBack }) {
     ];
     const closeHint = innerWidth < 40 ? "x close" : "x close session";
     const pcRoom = Math.max(0, innerWidth - closeHint.length - 10);
-    return (_jsxs("box", { flexDirection: "column", flexGrow: 1, gap: 1, children: [_jsxs(Panel, { title: "session", children: [_jsxs("box", { flexDirection: "row", justifyContent: "space-between", children: [_jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("text", { fg: T[statusTone(s.status)], attributes: TextAttributes.BOLD, children: `[${s.status}]` }), _jsx("text", { fg: T.dim, children: clip(pcLabel(s.pcs), pcRoom) })] }), _jsx("text", { fg: T.faint, children: closeHint })] }), _jsx(KpiGrid, { items: kpis, width: innerWidth })] }), _jsxs(Panel, { title: "transactions", grow: true, children: [_jsx("box", { flexGrow: 1, flexDirection: "column", children: !s.items.length ? (_jsx("text", { fg: T.faint, children: clip("no transactions in this session yet.", innerWidth) })) : (visible.map((it, i) => {
+    return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsxs(Panel, { title: "session", children: [_jsxs("box", { flexDirection: "row", justifyContent: "space-between", children: [_jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("text", { fg: T[statusTone(s.status)], attributes: TextAttributes.BOLD, children: `[${s.status}]` }), _jsx("text", { fg: T.dim, children: clip(pcLabel(s.pcs), pcRoom) })] }), _jsx("text", { fg: T.faint, children: closeHint })] }), _jsx(KpiGrid, { items: kpis, width: innerWidth })] }), _jsxs(Panel, { title: "transactions", grow: true, children: [_jsx("box", { flexGrow: 1, flexDirection: "column", children: !s.items.length ? (_jsx("text", { fg: T.faint, children: clip("no transactions in this session yet.", innerWidth) })) : (visible.map((it, i) => {
                             const idx = start + i;
                             const on = idx === cursor;
                             const isEditing = it.t === "hilang" ? s.editingFill === it.hkey : it.fill ? s.editingFill === it.fill : s.editingTid !== null && s.editingTid === it.r.tid;

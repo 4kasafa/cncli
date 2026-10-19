@@ -475,7 +475,7 @@ export function LiveView({ onBack }: { onBack: () => void }) {
   const width = Math.max(20, dims.width - 2);
   const innerWidth = Math.max(10, width - 4);
   const kpiRows = Math.ceil(4 / kpiCols(innerWidth));
-  const listLines = Math.max(1, dims.height - 11 - 2 * kpiRows);
+  const listLines = Math.max(1, dims.height - 10 - 2 * kpiRows);
   const cursor = Math.min(Math.max(0, s.cursor), Math.max(0, s.items.length - 1));
   const start = Math.max(0, Math.min(cursor - Math.floor(listLines / 2), s.items.length - listLines));
   const visible = s.items.slice(start, start + listLines);
@@ -715,7 +715,7 @@ export function LiveView({ onBack }: { onBack: () => void }) {
   const pcRoom = Math.max(0, innerWidth - closeHint.length - 10);
 
   return (
-    <box flexDirection="column" flexGrow={1} gap={1}>
+    <box flexDirection="column" flexGrow={1}>
       <Panel title="session">
         <box flexDirection="row" justifyContent="space-between">
           <box flexDirection="row" gap={1}>
