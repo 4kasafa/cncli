@@ -83,7 +83,7 @@ export function rootBudget(width, height, contentRows) {
         (font === null ? 0 : 1) +
         logoRows() +
         (tagline ? 1 : 0) +
-        (gaps ? 4 : 0) +
+        (gaps ? 1 : 0) +
         12 +
         (compact ? 4 : Math.max(4, contentRows));
     for (let i = 0; i < 5 && needed() > height; i++) {

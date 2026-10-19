@@ -87,7 +87,6 @@ export function RootMenu({
   );
   if (gaps) rows.push(<text key="spacer"> </text>);
   VIEWS.forEach((v, i) => {
-    if (i > 0 && gaps) rows.push(<text key={"gap" + i}> </text>);
     const key = BOX_OF[v.id];
     const all = view.lines[key];
     rows.push(

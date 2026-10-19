@@ -32,8 +32,6 @@ export function RootMenu({ data, sel, width, height, }) {
     if (gaps)
         rows.push(_jsx("text", { children: " " }, "spacer"));
     VIEWS.forEach((v, i) => {
-        if (i > 0 && gaps)
-            rows.push(_jsx("text", { children: " " }, "gap" + i));
         const key = BOX_OF[v.id];
         const all = view.lines[key];
         rows.push(_jsx(MenuBox, { label: v.label.toLowerCase(), lines: compact ? all.slice(0, 1) : all, on: sel === i, width: width }, v.id));
