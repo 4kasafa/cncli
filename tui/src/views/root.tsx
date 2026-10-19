@@ -48,7 +48,7 @@ function MenuBox({
       title={label}
       titleAlignment="left"
       titleColor={on ? T.accent : T.text}
-      paddingX={1}
+      padding={1}
     >
       {lines.map((ln, i) => (
         <text
