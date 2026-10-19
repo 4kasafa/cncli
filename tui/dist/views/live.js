@@ -34,7 +34,7 @@ function Row({ on, bad, width, spec, tone, }) {
     return (_jsxs("box", { flexDirection: "row", children: [_jsx("text", { fg: bad || on ? (bad ? T.warn : T.accent) : T.faint, children: marker }), _jsx("text", { fg: fg, attributes: on ? TextAttributes.BOLD : undefined, children: " " + line })] }));
 }
 function Panel({ title, grow, children, }) {
-    return (_jsx("box", { width: "100%", flexDirection: "column", border: true, borderStyle: "rounded", borderColor: T.line, title: title, titleAlignment: "left", titleColor: T.dim, paddingX: 1, flexGrow: grow ? 1 : 0, children: children }));
+    return (_jsx("box", { width: "100%", flexDirection: "column", border: true, borderStyle: "rounded", borderColor: T.accent, title: title, titleAlignment: "left", titleColor: T.accent, paddingX: 1, flexGrow: grow ? 1 : 0, children: children }));
 }
 function txSpec(it, compact) {
     const no = TxMerge.noUrutText(it);

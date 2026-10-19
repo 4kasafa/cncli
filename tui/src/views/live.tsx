@@ -93,10 +93,10 @@ function Panel({
       flexDirection="column"
       border
       borderStyle="rounded"
-      borderColor={T.line}
+      borderColor={T.accent}
       title={title}
       titleAlignment="left"
-      titleColor={T.dim}
+      titleColor={T.accent}
       paddingX={1}
       flexGrow={grow ? 1 : 0}
     >
