@@ -44,10 +44,10 @@ function MenuBox({
       width="100%"
       border
       borderStyle="rounded"
-      borderColor={on ? T.accent : T.line}
+      borderColor={on ? T.accent : T.text}
       title={label}
       titleAlignment="left"
-      titleColor={on ? T.accent : T.faint}
+      titleColor={on ? T.accent : T.text}
       paddingX={1}
     >
       {lines.map((ln, i) => (
