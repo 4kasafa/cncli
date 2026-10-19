@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
 import { T } from "../theme.js";
 import { KpiGrid, Msg } from "../ui.js";
-import { clip, formatRow, type ColSpec } from "../layout.js";
+import { clip, formatRow, kpiCols, type ColSpec } from "../layout.js";
 import * as Lan from "../lan.js";
 import * as Store from "../store.js";
 import * as Comps from "../comps.js";
 import * as TxMerge from "../txmerge.js";
-import { cleanNum, padU, rupiah } from "../fmt.js";
+import { cleanNum, dots, rupiah } from "../fmt.js";
 
 interface Picker {
   mode: "open" | "add";
@@ -78,22 +78,62 @@ function Row({
   );
 }
 
-function txSpec(it: TxMerge.MergedItem): ColSpec[] {
+function Panel({
+  title,
+  grow,
+  children,
+}: {
+  title: string;
+  grow?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <box
+      width="100%"
+      flexDirection="column"
+      border
+      borderStyle="rounded"
+      borderColor={T.line}
+      title={title}
+      titleAlignment="left"
+      titleColor={T.dim}
+      paddingX={1}
+      flexGrow={grow ? 1 : 0}
+    >
+      {children}
+    </box>
+  );
+}
+
+function txSpec(it: TxMerge.MergedItem, compact: boolean): ColSpec[] {
+  const no = TxMerge.noUrutText(it);
   if (it.t === "hilang") {
-    return [
-      { key: "text", min: 10, flex: 1, text: `no ${padU(it.n, it.w)} · not on PC — e fill` },
-      { key: "pc", min: 4, text: it.pc_name || "" },
-    ];
+    return compact
+      ? [
+          { key: "no", min: 6, align: "right", text: no },
+          { key: "amount", min: 11, align: "right", text: "? -" },
+          { key: "whenpc", min: 0, flex: 1, text: `--:--:-- ${it.pc_name || ""}` },
+        ]
+      : [
+          { key: "no", min: 6, align: "right", text: no },
+          { key: "amount", min: 12, align: "right", text: "?" },
+          { key: "kind", min: 2, text: "-" },
+          { key: "whenpc", min: 0, flex: 1, text: `--:--:-- ${it.pc_name || ""}` },
+        ];
   }
   const r = it.r;
-  const isFill = !!it.fill;
+  if (compact) {
+    return [
+      { key: "no", min: 6, align: "right", text: no },
+      { key: "amount", min: 11, align: "right", text: `${dots(r.total)} ${TxMerge.txKind(r.tunai, r.nontunai)}` },
+      { key: "whenpc", min: 0, flex: 1, text: `${TxMerge.txTime(r.created_at)} ${it.pc_name || ""}`.trim() },
+    ];
+  }
   return [
-    { key: "no", min: 8, text: r.no_transaksi || `id-${r.server_id}` },
-    { key: "total", min: 10, align: "right", text: rupiah(r.total) },
-    { key: "t", min: 9, align: "right", text: "T " + rupiah(r.tunai) },
-    { key: "nt", min: 9, align: "right", text: "NT " + rupiah(r.nontunai) },
-    { key: "pc", min: 5, flex: 1, text: it.pc_name || "" },
-    { key: "kat", min: 6, text: isFill ? "manual" : r.kategori || (r.bank ? r.bank : "") },
+    { key: "no", min: 6, align: "right", text: no },
+    { key: "amount", min: 12, align: "right", text: rupiah(r.total) },
+    { key: "kind", min: 2, text: TxMerge.txKind(r.tunai, r.nontunai) },
+    { key: "whenpc", min: 0, flex: 1, text: `${TxMerge.txTime(r.created_at)} ${it.pc_name || ""}`.trim() },
   ];
 }
 
@@ -433,8 +473,10 @@ export function LiveView({ onBack }: { onBack: () => void }) {
 
   const s = st.current;
   const width = Math.max(20, dims.width - 2);
+  const innerWidth = Math.max(10, width - 4);
+  const kpiRows = Math.ceil(4 / kpiCols(innerWidth));
+  const listLines = Math.max(1, dims.height - 11 - 2 * kpiRows);
   const cursor = Math.min(Math.max(0, s.cursor), Math.max(0, s.items.length - 1));
-  const listLines = Math.max(1, Math.floor((dims.height - 13) / 1));
   const start = Math.max(0, Math.min(cursor - Math.floor(listLines / 2), s.items.length - listLines));
   const visible = s.items.slice(start, start + listLines);
   const histCursor = Math.min(s.histCursor, Math.max(0, s.history.length - 1));
@@ -669,44 +711,53 @@ export function LiveView({ onBack }: { onBack: () => void }) {
     { label: "total", value: rupiah(s.totals.all) },
   ];
 
+  const closeHint = innerWidth < 40 ? "x close" : "x close session";
+  const pcRoom = Math.max(0, innerWidth - closeHint.length - 10);
+
   return (
-    <box flexDirection="column" flexGrow={1}>
-      <box flexDirection="row" justifyContent="space-between">
-        <box flexDirection="row" gap={1}>
-          <text fg={T[statusTone(s.status)]} attributes={TextAttributes.BOLD}>{`[${s.status}]`}</text>
-          <text fg={T.dim}>{clip(pcLabel(s.pcs), Math.max(0, width - 12))}</text>
+    <box flexDirection="column" flexGrow={1} gap={1}>
+      <Panel title="session">
+        <box flexDirection="row" justifyContent="space-between">
+          <box flexDirection="row" gap={1}>
+            <text fg={T[statusTone(s.status)]} attributes={TextAttributes.BOLD}>{`[${s.status}]`}</text>
+            <text fg={T.dim}>{clip(pcLabel(s.pcs), pcRoom)}</text>
+          </box>
+          <text fg={T.faint}>{closeHint}</text>
         </box>
-        <text fg={T.faint}>x close session</text>
-      </box>
-      <KpiGrid items={kpis} width={width} />
-      <box flexGrow={1} flexDirection="column" paddingTop={1}>
-        {!s.items.length ? (
-          <text fg={T.faint}>no transactions in this session yet.</text>
-        ) : (
-          visible.map((it, i) => {
-            const idx = start + i;
-            const on = idx === cursor;
-            const isEditing =
-              it.t === "hilang" ? s.editingFill === it.hkey : it.fill ? s.editingFill === it.fill : s.editingTid !== null && s.editingTid === it.r.tid;
-            return (
-              <box key={it.t === "hilang" ? "h" + it.hkey : it.fill || it.r.tid || "tx" + idx} flexDirection="column">
-                <Row on={on} bad={it.t === "hilang"} width={width} spec={txSpec(it)} />
-                {isEditing ? (
-                  <box flexDirection="row">
-                    <text>{" "}</text>
-                    <text fg={s.editFocus === "t" ? T.text : T.dim}>{"T:"}</text>
-                    <text fg={T.text}>{s.editT + (s.editFocus === "t" ? "█" : "")}</text>
-                    <text fg={s.editFocus === "n" ? T.text : T.dim}>{" NT:"}</text>
-                    <text fg={T.text}>{s.editN + (s.editFocus === "n" ? "█" : "")}</text>
-                    <text fg={T.faint}>{"  enter save · tab switch · esc cancel"}</text>
-                  </box>
-                ) : null}
-              </box>
-            );
-          })
-        )}
-      </box>
-      <Msg text={s.msg.t} tone={s.msg.tone} />
+        <KpiGrid items={kpis} width={innerWidth} />
+      </Panel>
+      <Panel title="transactions" grow>
+        <box flexGrow={1} flexDirection="column">
+          {!s.items.length ? (
+            <text fg={T.faint}>{clip("no transactions in this session yet.", innerWidth)}</text>
+          ) : (
+            visible.map((it, i) => {
+              const idx = start + i;
+              const on = idx === cursor;
+              const isEditing =
+                it.t === "hilang" ? s.editingFill === it.hkey : it.fill ? s.editingFill === it.fill : s.editingTid !== null && s.editingTid === it.r.tid;
+              return (
+                <box key={it.t === "hilang" ? "h" + it.hkey : it.fill || it.r.tid || "tx" + idx} flexDirection="column">
+                  <Row on={on} bad={it.t === "hilang"} width={innerWidth} spec={txSpec(it, innerWidth < 40)} />
+                  {isEditing ? (
+                    <box flexDirection="row">
+                      <text>{" "}</text>
+                      <text fg={s.editFocus === "t" ? T.text : T.dim}>{"T:"}</text>
+                      <text fg={T.text}>{s.editT + (s.editFocus === "t" ? "█" : "")}</text>
+                      <text fg={s.editFocus === "n" ? T.text : T.dim}>{" NT:"}</text>
+                      <text fg={T.text}>{s.editN + (s.editFocus === "n" ? "█" : "")}</text>
+                      <text fg={T.faint}>
+                        {"  " + clip("enter save · tab switch · esc cancel", Math.max(0, innerWidth - 10 - s.editT.length - s.editN.length))}
+                      </text>
+                    </box>
+                  ) : null}
+                </box>
+              );
+            })
+          )}
+        </box>
+        <Msg text={clip(s.msg.t, innerWidth)} tone={s.msg.tone} />
+      </Panel>
     </box>
   );
 }

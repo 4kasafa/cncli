@@ -1,4 +1,5 @@
 import type { TxRow, Fill } from "./store.js";
+import { padU } from "./fmt.js";
 
 export function numUrut(r: Partial<TxRow> | null | undefined): number {
   const n = parseInt(String((r && r.no_urut) || ""), 10);
@@ -37,6 +38,24 @@ export interface MergedHilang {
 }
 
 export type MergedItem = MergedTx | MergedHilang;
+
+export function noUrutText(it: MergedItem): string {
+  if (it.t === "hilang") return padU(it.n, it.w);
+  if (it.fill && it.w) return padU(it.seq, it.w);
+  return String(it.r.no_urut || "") || "-";
+}
+
+export function txKind(tunai: number, nontunai: number): "C" | "NC" | "S" | "-" {
+  if (tunai > 0 && nontunai > 0) return "S";
+  if (tunai > 0) return "C";
+  if (nontunai > 0) return "NC";
+  return "-";
+}
+
+export function txTime(createdAt: unknown): string {
+  const m = String(createdAt == null ? "" : createdAt).match(/[T ](\d{2}:\d{2}:\d{2})/);
+  return m ? m[1] : "--:--:--";
+}
 
 export function fillRow(f: Fill, pcId: string, pcName: string): TxRow {
   return {

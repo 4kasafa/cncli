@@ -1,3 +1,4 @@
+import { padU } from "./fmt.js";
 export function numUrut(r) {
     const n = parseInt(String((r && r.no_urut) || ""), 10);
     return isNaN(n) || n <= 0 ? 0 : n;
@@ -7,6 +8,26 @@ export function dayOf(r) {
 }
 export function fkey(pcId, day, n) {
     return pcId + "|" + day + "|" + n;
+}
+export function noUrutText(it) {
+    if (it.t === "hilang")
+        return padU(it.n, it.w);
+    if (it.fill && it.w)
+        return padU(it.seq, it.w);
+    return String(it.r.no_urut || "") || "-";
+}
+export function txKind(tunai, nontunai) {
+    if (tunai > 0 && nontunai > 0)
+        return "S";
+    if (tunai > 0)
+        return "C";
+    if (nontunai > 0)
+        return "NC";
+    return "-";
+}
+export function txTime(createdAt) {
+    const m = String(createdAt == null ? "" : createdAt).match(/[T ](\d{2}:\d{2}:\d{2})/);
+    return m ? m[1] : "--:--:--";
 }
 export function fillRow(f, pcId, pcName) {
     return {
