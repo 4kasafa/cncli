@@ -5,7 +5,7 @@ import { App } from "./app.js";
 import { T } from "./theme.js";
 const renderer = await createCliRenderer({
     exitOnCtrlC: false,
-    useMouse: true,
+    useMouse: false,
     backgroundColor: T.bg,
     targetFps: 30,
 });

@@ -13,7 +13,7 @@ writeFileSync(
   JSON.stringify({ kasir: "A", kasir_id: "1", cabang: "C", shift: "1", size: "58", qty: {}, expense: 0, note: "" }),
 );
 
-const stub = { destroy() {} };
+const stub = { destroy() {}, useMouse: false };
 const t = await testRender(h(App, { renderer: stub as never }), { width: 100, height: 30, useMouse: true });
 await t.flush();
 
@@ -31,10 +31,14 @@ function check(cond: boolean, msg: string) {
 }
 
 check(f().includes("live") && f().includes("computers"), "root menu rendered");
+await t.waitFor(() => stub.useMouse);
+check(stub.useMouse, "mouse enabled on root");
 
 t.mockInput.pressKey("2");
 await t.renderOnce();
 check(f().includes("PHYSICAL"), "print view open");
+await t.waitFor(() => !stub.useMouse);
+check(!stub.useMouse, "mouse disabled in view");
 
 t.mockInput.pressKey("3");
 await t.renderOnce();
@@ -86,6 +90,8 @@ check(f().includes("session history"), "digit jump key still works from computer
 t.mockInput.pressKey("h");
 await t.renderOnce();
 check(f().includes("computers") && !f().includes("session history"), "back on root for mouse checks");
+await t.waitFor(() => stub.useMouse);
+check(stub.useMouse, "mouse re-enabled on root");
 const printY = f()
   .split("\n")
   .findIndex((ln) => ln.includes("print"));

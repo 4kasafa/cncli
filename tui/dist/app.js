@@ -40,6 +40,9 @@ export function App({ renderer }) {
         setTextMode(false);
     }, [view]);
     useEffect(() => {
+        renderer.useMouse = view === null && !help;
+    }, [renderer, view, help]);
+    useEffect(() => {
         let live = true;
         const tick = async () => {
             const s = await Store.openSessionOf();
