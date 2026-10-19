@@ -33,11 +33,13 @@ function MenuBox({
   lines,
   on,
   width,
+  onPress,
 }: {
   label: string;
   lines: string[];
   on: boolean;
   width: number;
+  onPress: () => void;
 }) {
   return (
     <box
@@ -50,6 +52,9 @@ function MenuBox({
       titleColor={on ? T.accent : T.text}
       paddingX={1}
       paddingTop={1}
+      onMouseDown={(e) => {
+        if (e.button === 0) onPress();
+      }}
     >
       {lines.map((ln, i) => (
         <text
@@ -69,11 +74,13 @@ export function RootMenu({
   sel,
   width,
   height,
+  onPick,
 }: {
   data: RootData;
   sel: number;
   width: number;
   height: number;
+  onPick: (i: number) => void;
 }) {
   const view = rootLines(data);
   const { font, tagline, gaps, compact } = rootBudget(width, height, contentRows(view));
@@ -96,6 +103,7 @@ export function RootMenu({
         lines={compact ? all.slice(0, 1) : all}
         on={sel === i}
         width={width}
+        onPress={() => onPick(i)}
       />,
     );
   });

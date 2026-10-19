@@ -142,7 +142,18 @@ export function App({ renderer }: { renderer: CliRenderer }) {
         </box>
       ) : (
         <box flexGrow={1} flexDirection="column" paddingX={1}>
-          {view === null ? <RootMenu data={data} sel={sel} width={width} height={height} /> : null}
+          {view === null ? (
+            <RootMenu
+              data={data}
+              sel={sel}
+              width={width}
+              height={height}
+              onPick={(i) => {
+                if (i === sel) setView(VIEWS[i].id);
+                else setSel(i);
+              }}
+            />
+          ) : null}
           {view === "setoran" ? <SetoranView onBack={() => setView(null)} onTextMode={setTextMode} /> : null}
           {view === "live" ? <LiveView onBack={() => setView(null)} /> : null}
           {view === "print" ? <PrintView onBack={() => setView(null)} onTextMode={setTextMode} /> : null}

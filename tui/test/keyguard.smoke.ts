@@ -14,7 +14,7 @@ writeFileSync(
 );
 
 const stub = { destroy() {} };
-const t = await testRender(h(App, { renderer: stub as never }), { width: 100, height: 30 });
+const t = await testRender(h(App, { renderer: stub as never }), { width: 100, height: 30, useMouse: true });
 await t.flush();
 
 const f = () => t.captureCharFrame();
@@ -82,6 +82,20 @@ check(f().includes("PCs ("), "still on computers");
 t.mockInput.pressKey("1");
 await t.renderOnce();
 check(f().includes("session history"), "digit jump key still works from computers");
+
+t.mockInput.pressKey("h");
+await t.renderOnce();
+check(f().includes("computers") && !f().includes("session history"), "back on root for mouse checks");
+const printY = f()
+  .split("\n")
+  .findIndex((ln) => ln.includes("print"));
+check(printY >= 0, "print menu box found in frame");
+await t.mockMouse.click(5, printY + 1);
+await t.renderOnce();
+check(f().includes("computers") && !f().includes("PHYSICAL"), "first click selects print box");
+await t.mockMouse.click(5, printY + 1);
+await t.renderOnce();
+check(f().includes("PHYSICAL"), "second click opens print view");
 
 console.log(failed ? "RESULT: " + failed + " FAILURES" : "RESULT: ALL SMOKE CHECKS PASSED");
 await t.dispose();
