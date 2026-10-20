@@ -33,6 +33,19 @@ to a single line. `enter`/`l` descend, `esc`/`h` ascend,
 at 40-60 cols (clipped single-line rows, boxes only on the root menu,
 adaptive KPI grid).
 
+## QR scan (optional)
+
+Computers → add/edit → tab to `[ scan qr ]` → `enter` takes one photo
+(no live preview), fills the address and returns focus there; `enter` again
+saves. Nothing is auto-saved.
+
+```sh
+pkg install termux-api zbar
+termux-setup-storage
+```
+
+Needs the Termux:API app and camera permission.
+
 ## Test
 
 ```sh

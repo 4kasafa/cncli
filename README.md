@@ -18,6 +18,8 @@ cd tui && npm install && cd ..      # once; bun users run src/ directly
 cncli
 ```
 
+QR scan (optional): Termux:API app + `pkg install termux-api zbar`, then `termux-setup-storage`.
+
 Update later: `cd cncli && git pull`. Node users also run `cd tui && npm run build`.
 
 ## Install (Windows dev)

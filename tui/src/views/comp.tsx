@@ -7,6 +7,7 @@ import { clip } from "../layout.js";
 import * as Lan from "../lan.js";
 import * as Store from "../store.js";
 import * as Comps from "../comps.js";
+import { qrAddress, scanQr } from "../qr.js";
 
 type Page = "list" | "add" | "edit" | "ctl" | "log";
 type Pending = "w-on" | "w-off" | "wipe" | "log" | null;
@@ -21,7 +22,8 @@ interface St {
   newBase: string;
   edName: string;
   edBase: string;
-  focus: "name" | "base" | null;
+  focus: "name" | "base" | "scan" | null;
+  scanning: boolean;
   pendingDel: string | null;
   ctlId: string | null;
   ctlBusy: boolean;
@@ -57,6 +59,7 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
     edName: "",
     edBase: "",
     focus: null,
+    scanning: false,
     pendingDel: null,
     ctlId: null,
     ctlBusy: false,
@@ -265,6 +268,37 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
     rerender();
   }
 
+  async function scanInto(field: "newBase" | "edBase") {
+    const s = st.current;
+    if (s.scanning) return;
+    s.scanning = true;
+    say("scanning qr...", "dim");
+    rerender();
+    try {
+      const r = await scanQr();
+      const sx = st.current;
+      if (sx.page !== "add" && sx.page !== "edit") return;
+      if (!r.ok) {
+        sx.focus = "scan";
+        say(r.error || "scan failed", "bad");
+        return;
+      }
+      const addr = qrAddress(r.value || "");
+      if (!addr) {
+        sx.focus = "scan";
+        say("QR payload is not an HTTP(S) URL", "bad");
+        return;
+      }
+      if (field === "newBase") sx.newBase = addr;
+      else sx.edBase = addr;
+      sx.focus = "base";
+      say("address filled - press enter to save", "ok");
+    } finally {
+      st.current.scanning = false;
+      rerender();
+    }
+  }
+
   function saveAdd() {
     const s = st.current;
     const r = Comps.add(s.newName, s.newBase);
@@ -327,22 +361,37 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
     if (sx.page === "add" || sx.page === "edit") {
       if (key.name === "escape") {
         key.preventDefault();
+        if (sx.scanning) return;
         sx.page = "list";
         sx.focus = null;
         sx.editingId = null;
         rerender();
         return;
       }
-      if (key.name === "tab" || key.name === "down" || key.name === "return") {
+      if (key.name === "tab" || key.name === "down") {
         key.preventDefault();
-        if (sx.focus === "name") sx.focus = "base";
-        else sx.page === "add" ? saveAdd() : saveEdit();
+        sx.focus = sx.focus === "name" ? "base" : sx.focus === "base" ? "scan" : "name";
+        rerender();
+        return;
+      }
+      if (key.name === "return") {
+        key.preventDefault();
+        if (sx.focus === "name") {
+          sx.focus = "base";
+          rerender();
+          return;
+        }
+        if (sx.focus === "scan") {
+          void scanInto(sx.page === "add" ? "newBase" : "edBase");
+          return;
+        }
+        sx.page === "add" ? saveAdd() : saveEdit();
         rerender();
         return;
       }
       if (key.name === "up") {
         key.preventDefault();
-        sx.focus = "name";
+        sx.focus = sx.focus === "scan" ? "base" : sx.focus === "base" ? "name" : "name";
         rerender();
         return;
       }
@@ -528,9 +577,15 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
             }}
             onSubmit={() => (isAdd ? saveAdd() : saveEdit())}
           />
+          <box flexDirection="row" gap={1}>
+            <text fg={s.focus === "scan" ? T.accent : T.faint}>{s.focus === "scan" ? ">" : " "}</text>
+            <text fg={s.focus === "scan" ? T.text : T.dim} attributes={s.focus === "scan" ? TextAttributes.BOLD : undefined}>
+              {s.scanning ? "scanning..." : "[ scan qr ]"}
+            </text>
+          </box>
         </box>
         <box paddingTop={1}>
-          <text fg={T.faint}>{clip("tab/enter move · enter on address saves · esc cancels", width)}</text>
+          <text fg={T.faint}>{clip("tab move · enter scan/save · esc cancels", width)}</text>
         </box>
         <box flexGrow={1} />
         <Msg text={s.msg.t} tone={s.msg.tone} />
