@@ -42,7 +42,8 @@ interface St {
   pin: string;
   wipeConfirm: string;
   pinFocus: "pin" | "confirm";
-  busy: boolean;
+  loading: string | null;
+  reqSeq: number;
   logLines: string[] | null;
   logId: string | null;
   msg: { t: string; tone: "dim" | "ok" | "bad" };
@@ -90,7 +91,8 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
     pin: "",
     wipeConfirm: "",
     pinFocus: "pin",
-    busy: false,
+    loading: null,
+    reqSeq: 0,
     logLines: null,
     logId: null,
     msg: { t: "", tone: "dim" },
@@ -103,19 +105,21 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
 
   const s = st.current;
   const scanBusy = s.scanState === "countdown" || s.scanState === "running";
+  const busy = scanBusy || Boolean(s.loading);
+  const spinChar = SPIN[spinFrame % SPIN.length];
 
   useEffect(() => {
     onTextMode?.(s.page === "add" || s.page === "edit" || s.pendingAction !== null);
   });
 
   useEffect(() => {
-    if (!scanBusy) {
+    if (!busy) {
       setSpinFrame(0);
       return;
     }
     const id = setInterval(() => setSpinFrame((n) => (n + 1) % SPIN.length), 90);
     return () => clearInterval(id);
-  }, [scanBusy]);
+  }, [busy]);
 
   useEffect(() => {
     void (async () => {
@@ -131,6 +135,21 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
 
   function say(t: string, tone: "dim" | "ok" | "bad") {
     st.current.msg = { t, tone };
+  }
+
+  function beginLoad(label: string): number {
+    const sx = st.current;
+    const seq = ++sx.reqSeq;
+    sx.loading = label;
+    rerender();
+    return seq;
+  }
+
+  function endLoad(seq: number) {
+    const sx = st.current;
+    if (seq !== sx.reqSeq) return;
+    sx.loading = null;
+    rerender();
   }
 
   function clearScanTimer() {
@@ -161,6 +180,7 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
   }
 
   function checkAllNow(silent = false) {
+    const seq = beginLoad("checking connections...");
     if (!silent) {
       say("checking all PCs...", "dim");
       rerender();
@@ -169,6 +189,7 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
       await Comps.checkAll();
       await refreshList();
       const sx = st.current;
+      endLoad(seq);
       if (!silent) {
         say("", "dim");
         rerender();
@@ -195,16 +216,24 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
       rerender();
       return;
     }
+    const seq = beginLoad("getting status...");
     const r = await Lan.statusGet(c.base);
     const cur = st.current;
-    if (my !== cur.detailSeq || cur.detailId !== id) return;
+    if (my !== cur.detailSeq || cur.detailId !== id) {
+      endLoad(seq);
+      return;
+    }
     if (!r.ok && r.error === Lan.ERR_LEGACY) {
       const h = await Lan.health(c.base);
       const after = st.current;
-      if (my !== after.detailSeq || after.detailId !== id) return;
+      if (my !== after.detailSeq || after.detailId !== id) {
+        endLoad(seq);
+        return;
+      }
       after.detailBusy = false;
       after.statusLine = h.ok ? "legacy PC: update firmware first" : "PC not reachable";
       after.statusBadge = h.ok ? { label: "stale", tone: "ok" } : { label: "down", tone: "bad" };
+      endLoad(seq);
       rerender();
       return;
     }
@@ -213,6 +242,7 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
       cur.statusLine = c.base;
       cur.statusBadge = { label: "down", tone: "bad" };
       cur.msg = { t: r.error || "failed", tone: "bad" };
+      endLoad(seq);
       rerender();
       return;
     }
@@ -222,6 +252,7 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
     cur.statusLine = "v" + (d.version || "?") + " · " + (d.ip || "?") + ":" + (d.port || "?");
     cur.statusBadge = { label: "ok", tone: "ok" };
     cur.watcherEnabled = !!d.watcher_enabled;
+    endLoad(seq);
     rerender();
   }
 
@@ -387,11 +418,9 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
       rerender();
       return;
     }
-    sx.busy = true;
-    rerender();
+    const seq = beginLoad("updating watcher...");
     const r = await Lan.watcherSet(c.base, sx.pin, enabled);
     const cur = st.current;
-    cur.busy = false;
     if (r.ok) {
       const d = (r.data || {}) as { enabled?: boolean };
       cur.watcherEnabled = !!d.enabled;
@@ -403,6 +432,7 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
       say(r.error || "failed", "bad");
       if (r.status === 403 || r.status === 429) cur.pin = "";
     }
+    endLoad(seq);
     rerender();
   }
 
@@ -415,11 +445,9 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
       rerender();
       return;
     }
-    sx.busy = true;
-    rerender();
+    const seq = beginLoad("wiping data...");
     const r = await Lan.wipe(c.base, sx.pin, sx.wipeConfirm);
     const cur = st.current;
-    cur.busy = false;
     if (r.ok) {
       const n = (r.data as { deleted?: number } | undefined)?.deleted;
       cur.pendingAction = null;
@@ -432,6 +460,7 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
       if (r.status === 400) cur.wipeConfirm = "";
       else if (r.status === 403 || r.status === 429) cur.pin = "";
     }
+    endLoad(seq);
     rerender();
   }
 
@@ -444,11 +473,9 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
       rerender();
       return;
     }
-    sx.busy = true;
-    rerender();
+    const seq = beginLoad("loading log...");
     const r = await Lan.logGet(c.base, sx.pin, 200);
     const cur = st.current;
-    cur.busy = false;
     if (r.ok) {
       const lines = (r.data as { lines?: string[] } | undefined)?.lines;
       cur.logLines = Array.isArray(lines) && lines.length ? lines : ["(empty)"];
@@ -461,6 +488,7 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
       say(r.error || "failed", "bad");
       if (r.status === 403 || r.status === 429) cur.pin = "";
     }
+    endLoad(seq);
     rerender();
   }
 
@@ -523,7 +551,7 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
   const width = Math.max(20, dims.width - 2);
   const innerWidth = Math.max(10, width - 4);
   const cursor = Math.min(Math.max(0, s.cursor), Math.max(0, s.list.length - 1));
-  const listLines = Math.max(1, dims.height - 17 - (s.pendingAction ? 3 : 0));
+  const listLines = Math.max(1, dims.height - 18 - (s.pendingAction ? 3 : 0));
   const start = Math.max(0, Math.min(cursor - Math.floor(listLines / 2), s.list.length - listLines));
   const visible = s.list.slice(start, start + listLines);
   const sel = s.list[cursor];
@@ -748,7 +776,7 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
         <Panel title="scan qr" grow>
           <text fg={T.faint}>{clip("point the camera at the QR code on the PC screen", innerWidth)}</text>
           <box flexDirection="row" gap={1}>
-            <text fg={T.accent}>{scanBusy ? SPIN[spinFrame % SPIN.length] : " "}</text>
+            <text fg={T.accent}>{scanBusy ? spinChar : " "}</text>
             <text fg={scanBusy ? T.text : T.dim}>{clip(scanStatus, Math.max(0, innerWidth - 2))}</text>
           </box>
           <box flexGrow={1} flexDirection="column">
@@ -856,6 +884,11 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
             <text fg={T.faint}>no PCs yet — press a to add one.</text>
           )}
         </box>
+        <Msg
+          text={clip(s.loading ?? "", Math.max(0, innerWidth - (s.loading ? 2 : 0)))}
+          tone="dim"
+          lead={s.loading ? spinChar + " " : undefined}
+        />
         <text fg={T.faint}>{clip("enter/r refresh · a add · e edit · d delete · w/m watcher · l log · x wipe · esc back", innerWidth)}</text>
       </Panel>
     </box>
