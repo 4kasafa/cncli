@@ -10,6 +10,7 @@ import * as Gas from "../gas.js";
 import * as Store from "../store.js";
 import * as Conflict from "../conflict.js";
 import { rupiah, nowStamp } from "../fmt.js";
+const SPIN = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 export function SetoranView({ onBack, onTextMode }) {
     const st = useRef({
         email: "",
@@ -21,6 +22,7 @@ export function SetoranView({ onBack, onTextMode }) {
         lastSync: null,
         lastError: null,
         syncing: false,
+        loggingIn: false,
         syncSeq: 0,
         page: "main",
         autoLogin: false,
@@ -33,6 +35,14 @@ export function SetoranView({ onBack, onTextMode }) {
     const [, bump] = useState(0);
     const rerender = () => bump((n) => n + 1);
     const dims = useTerminalDimensions();
+    const [spinFrame, setSpinFrame] = useState(0);
+    const busy = Boolean(st.current.loggingIn || st.current.syncing);
+    useEffect(() => {
+        if (!busy)
+            return;
+        const id = setInterval(() => setSpinFrame((n) => (n + 1) % SPIN.length), 90);
+        return () => clearInterval(id);
+    }, [busy]);
     useEffect(() => {
         onTextMode?.(st.current.page === "login");
     });
@@ -56,6 +66,7 @@ export function SetoranView({ onBack, onTextMode }) {
         const s = st.current;
         s.page = "login";
         s.autoLogin = false;
+        s.loggingIn = false;
         s.syncSeq++;
         s.focus = "email";
         rerender();
@@ -69,6 +80,7 @@ export function SetoranView({ onBack, onTextMode }) {
             rerender();
             return;
         }
+        s.loggingIn = true;
         say("contacting GAS...", "dim");
         rerender();
         const my = ++s.syncSeq;
@@ -76,6 +88,7 @@ export function SetoranView({ onBack, onTextMode }) {
         const s2 = st.current;
         if (my !== s2.syncSeq)
             return;
+        s2.loggingIn = false;
         s2.autoLogin = false;
         if (!res.success) {
             say("failed: " + (res.message || "no response"), "bad");
@@ -135,6 +148,7 @@ export function SetoranView({ onBack, onTextMode }) {
         s.pass = "";
         s.autoLogin = false;
         s.syncing = false;
+        s.loggingIn = false;
         s.syncSeq++;
         s.lastError = null;
         s.cache = [];
@@ -172,6 +186,7 @@ export function SetoranView({ onBack, onTextMode }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
     const s = st.current;
+    const spinChar = SPIN[spinFrame % SPIN.length];
     const width = Math.max(20, dims.width - 2);
     const innerWidth = Math.max(10, width - 4);
     const cur = Conflict.currentPeriode();
@@ -320,7 +335,7 @@ export function SetoranView({ onBack, onTextMode }) {
                             }, onSubmit: () => {
                                 st.current.focus = "pass";
                                 rerender();
-                            } }), _jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("box", { width: 8, children: _jsx("text", { fg: s.focus === "pass" ? T.text : T.dim, children: "pass" }) }), _jsx("text", { fg: T.text, children: "•".repeat(s.pass.length) + (s.focus === "pass" ? "█" : "") })] }), _jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("box", { width: 8, children: _jsx("text", { fg: T.faint, children: "remember" }) }), _jsx("text", { fg: s.focus === "remember" ? T.text : T.dim, children: `[${s.remember ? "x" : " "}] on this device (creds.json 600)` })] })] }), _jsx("box", { paddingTop: 1, children: _jsx("text", { fg: T.faint, children: clip("tab move · enter sign in · esc back", width) }) }), _jsx("box", { flexGrow: 1 }), _jsx(Msg, { text: s.msg.t, tone: s.msg.tone })] }));
+                            } }), _jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("box", { width: 8, children: _jsx("text", { fg: s.focus === "pass" ? T.text : T.dim, children: "pass" }) }), _jsx("text", { fg: T.text, children: "•".repeat(s.pass.length) + (s.focus === "pass" ? "█" : "") })] }), _jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("box", { width: 8, children: _jsx("text", { fg: T.faint, children: "remember" }) }), _jsx("text", { fg: s.focus === "remember" ? T.text : T.dim, children: `[${s.remember ? "x" : " "}] on this device (creds.json 600)` })] })] }), _jsx("box", { paddingTop: 1, children: _jsx("text", { fg: T.faint, children: clip("tab move · enter sign in · esc back", width) }) }), _jsx("box", { flexGrow: 1 }), _jsx(Msg, { text: s.loggingIn ? `${spinChar} ${s.msg.t}` : s.msg.t, tone: s.msg.tone })] }));
     }
     const kpis = [
         { label: "period", value: cur },
@@ -348,13 +363,17 @@ export function SetoranView({ onBack, onTextMode }) {
                             jumlahSelisih: Conflict.toInt(it.jumlahSelisih),
                         }), innerWidth - 2) })) })) : null] }, (it.tanggal || "") + i));
     }
-    const note = [s.msg.t, s.offline ? s.offline + " — r to retry" : ""].filter(Boolean).join(" · ");
-    const noteTone = s.offline ? "warn" : s.msg.tone;
+    const note = s.loggingIn
+        ? `${spinChar} ${s.msg.t}`
+        : s.syncing
+            ? `${spinChar} syncing...`
+            : [s.msg.t, s.offline ? s.offline + " — r to retry" : ""].filter(Boolean).join(" · ");
+    const noteTone = s.loggingIn || s.syncing ? "dim" : s.offline ? "warn" : s.msg.tone;
     const emailRoom = Math.max(0, innerWidth - syncText.length - 1);
     const hint = s.detailOpen && detailRow?._conflict
         ? "enter close · l local · g GAS · esc back"
         : "enter diff · r sync · g account · x sign out · esc back";
-    return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsxs(Panel, { title: "summary", children: [_jsxs("box", { flexDirection: "row", justifyContent: "space-between", children: [_jsx("text", { fg: T.accent, attributes: TextAttributes.BOLD, children: clip(s.email || "--", emailRoom) }), _jsx("text", { fg: T[syncTone], attributes: TextAttributes.BOLD, children: clip(syncText, innerWidth) })] }), _jsx(KpiGrid, { items: kpis, width: innerWidth, cols: 2 })] }), _jsxs(Panel, { title: "transactions", grow: true, children: [_jsxs("box", { flexGrow: 1, flexDirection: "column", children: [!rows.length ? (_jsx("text", { fg: T.faint, children: "no transactions this period." })) : (visible.map((it, i) => renderRow(it, start + i === cursor, start + i))), rows.length > visible.length ? (_jsx("text", { fg: T.faint, children: clip(`... ${rows.length} rows (scroll up/down)`, innerWidth) })) : null] }), _jsx("text", { fg: T.faint, children: clip(hint, innerWidth) }), _jsx(Msg, { text: clip(note, innerWidth), tone: noteTone })] })] }));
+    return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsxs(Panel, { title: "summary", children: [_jsxs("box", { flexDirection: "row", justifyContent: "space-between", children: [_jsx("text", { fg: T.accent, attributes: TextAttributes.BOLD, children: clip(s.email || "--", emailRoom) }), _jsx("text", { fg: T[syncTone], attributes: TextAttributes.BOLD, children: clip(syncText, innerWidth) })] }), _jsx(KpiGrid, { items: kpis, width: innerWidth, cols: 2 })] }), _jsxs(Panel, { title: "transactions", grow: true, children: [_jsxs("box", { flexGrow: 1, flexDirection: "column", children: [!rows.length ? (_jsx("text", { fg: T.faint, children: "no transactions this period." })) : (visible.map((it, i) => renderRow(it, start + i === cursor, start + i))), rows.length > visible.length ? (_jsx("text", { fg: T.faint, children: clip(`... ${rows.length} rows (scroll up/down)`, innerWidth) })) : null] }), _jsx(Msg, { text: clip(note, innerWidth), tone: noteTone }), _jsx("text", { fg: T.faint, children: clip(hint, innerWidth) })] })] }));
 }
 function fmt3(o) {
     return `K: ${rupiah(o.totalKomputer)} · F: ${rupiah(o.uangFisik)} · S: ${rupiah(o.jumlahSelisih)}`;
