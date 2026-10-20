@@ -328,10 +328,11 @@ export function SetoranView({ onBack, onTextMode }) {
         { label: "over", value: rupiah(lebih), tone: (lebih ? "ok" : "faint") },
         { label: "short", value: rupiah(kurang), tone: (kurang ? "bad" : "faint") },
     ];
+    const amountMin = Math.max(11, ...rows.map((it) => reportAmountText(it).length));
     function rowSpec(it) {
         return [
             { key: "when", min: 12, text: reportDateLabel(it.tanggal, it.shift) },
-            { key: "amount", min: 11, text: reportAmountText(it) },
+            { key: "amount", min: amountMin, text: reportAmountText(it) },
             { key: "branch", min: 8, flex: 1, text: reportBranchLabel(it.cabang) },
         ];
     }
@@ -341,7 +342,7 @@ export function SetoranView({ onBack, onTextMode }) {
         const cells = specs.map((sp, ci) => clip(sp.text ?? "", widths[ci]).padEnd(widths[ci]));
         const st = reportStatusLine(it);
         const tone = st.label === "SHORT" ? "bad" : st.label === "OVER" ? "ok" : "dim";
-        return (_jsxs("box", { flexDirection: "column", children: [_jsxs("box", { flexDirection: "row", children: [_jsx("text", { fg: on ? T.accent : T.faint, children: on ? ">" : " " }), _jsx("text", { fg: tone, attributes: on ? TextAttributes.BOLD : undefined, children: " " + cells[0] }), _jsx("text", { fg: tone, attributes: on ? TextAttributes.BOLD : undefined, children: " " + cells[1] }), _jsx("text", { fg: tone, attributes: on ? TextAttributes.BOLD : undefined, children: "   " + cells[2] })] }), on && s.detailOpen ? (_jsx("box", { flexDirection: "column", paddingLeft: 2, children: it._conflict ? (_jsxs(_Fragment, { children: [_jsx("text", { fg: T.dim, children: clip("local " + fmt3(it._conflict.lokal), innerWidth - 2) }), _jsx("text", { fg: T.dim, children: clip("GAS   " + fmt3(it._conflict.gas), innerWidth - 2) }), _jsx("text", { fg: T.faint, children: clip("l use local · g use GAS · enter close", innerWidth - 2) })] })) : (_jsx("text", { fg: T.dim, children: clip(fmt3({
+        return (_jsxs("box", { flexDirection: "column", children: [_jsxs("box", { flexDirection: "row", children: [_jsx("text", { fg: on ? T.accent : T.faint, children: on ? ">" : " " }), _jsx("text", { fg: T[tone], attributes: on ? TextAttributes.BOLD : undefined, children: " " + cells[0] }), _jsx("text", { fg: T[tone], attributes: on ? TextAttributes.BOLD : undefined, children: " " + cells[1] }), _jsx("text", { fg: T[tone], attributes: on ? TextAttributes.BOLD : undefined, children: "   " + cells[2] })] }), on && s.detailOpen ? (_jsx("box", { flexDirection: "column", paddingLeft: 2, children: it._conflict ? (_jsxs(_Fragment, { children: [_jsx("text", { fg: T.dim, children: clip("local " + fmt3(it._conflict.lokal), innerWidth - 2) }), _jsx("text", { fg: T.dim, children: clip("GAS   " + fmt3(it._conflict.gas), innerWidth - 2) }), _jsx("text", { fg: T.faint, children: clip("l use local · g use GAS · enter close", innerWidth - 2) })] })) : (_jsx("text", { fg: T.dim, children: clip(fmt3({
                             totalKomputer: Conflict.toInt(it.totalKomputer),
                             uangFisik: Conflict.toInt(it.uangFisik),
                             jumlahSelisih: Conflict.toInt(it.jumlahSelisih),

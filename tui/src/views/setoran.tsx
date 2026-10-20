@@ -380,10 +380,12 @@ export function SetoranView({ onBack, onTextMode }: { onBack: () => void; onText
     { label: "short", value: rupiah(kurang), tone: (kurang ? "bad" : "faint") as Tone },
   ];
 
+  const amountMin = Math.max(11, ...rows.map((it) => reportAmountText(it).length));
+
   function rowSpec(it: Conflict.GasItem): ColSpec[] {
     return [
       { key: "when", min: 12, text: reportDateLabel(it.tanggal, it.shift) },
-      { key: "amount", min: 11, text: reportAmountText(it) },
+      { key: "amount", min: amountMin, text: reportAmountText(it) },
       { key: "branch", min: 8, flex: 1, text: reportBranchLabel(it.cabang) },
     ];
   }
@@ -398,13 +400,13 @@ export function SetoranView({ onBack, onTextMode }: { onBack: () => void; onText
       <box key={(it.tanggal || "") + i} flexDirection="column">
         <box flexDirection="row">
           <text fg={on ? T.accent : T.faint}>{on ? ">" : " "}</text>
-          <text fg={tone} attributes={on ? TextAttributes.BOLD : undefined}>
+          <text fg={T[tone]} attributes={on ? TextAttributes.BOLD : undefined}>
             {" " + cells[0]}
           </text>
-          <text fg={tone} attributes={on ? TextAttributes.BOLD : undefined}>
+          <text fg={T[tone]} attributes={on ? TextAttributes.BOLD : undefined}>
             {" " + cells[1]}
           </text>
-          <text fg={tone} attributes={on ? TextAttributes.BOLD : undefined}>
+          <text fg={T[tone]} attributes={on ? TextAttributes.BOLD : undefined}>
             {"   " + cells[2]}
           </text>
         </box>
