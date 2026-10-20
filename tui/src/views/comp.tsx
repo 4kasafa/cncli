@@ -778,14 +778,14 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
           </text>
           <text fg={T.faint}>last 200 lines</text>
         </box>
-        <scrollbox flexGrow={1} width="100%">
+        <scrollbox flexGrow={1} width="100%" focused>
           {(s.logLines || ["(empty)"]).map((ln, i) => (
-            <text key={i} fg={T.dim} wrapMode="none">
+            <text key={i} fg={T.dim} wrapMode="char">
               {ln || " "}
             </text>
           ))}
         </scrollbox>
-        <text fg={T.faint}>{clip("esc back", width)}</text>
+        <text fg={T.faint}>{clip("up/down scroll · esc back", width)}</text>
       </box>
     );
   }
