@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
 import { T, type Tone } from "../theme.js";
-import { Field, Msg, Panel } from "../ui.js";
+import { Field, KpiGrid, Msg, Panel } from "../ui.js";
 import { clip, planColumns, type ColSpec } from "../layout.js";
 import { reportBranchLabel, reportDateLabel, reportStatusLine } from "../rootinfo.js";
 import * as Gas from "../gas.js";
@@ -217,7 +217,7 @@ export function SetoranView({ onBack, onTextMode }: { onBack: () => void; onText
   const cursor = Math.min(Math.max(0, s.cursor), Math.max(0, rows.length - 1));
   const detailRow = s.detailOpen ? rows[cursor] : undefined;
   const detailLines = detailRow ? (detailRow._conflict ? 3 : 1) : 0;
-  const listLines = Math.max(1, Math.floor(dims.height - 14 - detailLines));
+  const listLines = Math.max(1, Math.floor(dims.height - 16 - detailLines));
   const start = Math.max(0, Math.min(cursor - Math.floor(listLines / 2), rows.length - listLines));
   const visible = rows.slice(start, start + listLines);
   const syncText = s.syncing
@@ -373,19 +373,11 @@ export function SetoranView({ onBack, onTextMode }: { onBack: () => void; onText
     );
   }
 
-  const topRows: { label: string; value: string; tone?: Tone }[][] = [
-    [
-      { label: "period", value: cur, tone: "accent" },
-      { label: "sync", value: syncText, tone: syncTone },
-    ],
-    [
-      { label: "email", value: s.email || "--", tone: "dim" },
-      { label: "tx", value: String(rows.length), tone: "text" },
-    ],
-    [
-      { label: "over", value: rupiah(lebih), tone: lebih ? "ok" : "faint" },
-      { label: "short", value: rupiah(kurang), tone: kurang ? "bad" : "faint" },
-    ],
+  const kpis = [
+    { label: "email", value: s.email || "--" },
+    { label: "tx", value: String(rows.length) },
+    { label: "over", value: rupiah(lebih), tone: (lebih ? "ok" : "faint") as Tone },
+    { label: "short", value: rupiah(kurang), tone: (kurang ? "bad" : "faint") as Tone },
   ];
 
   function rowSpec(it: Conflict.GasItem): ColSpec[] {
@@ -451,9 +443,15 @@ export function SetoranView({ onBack, onTextMode }: { onBack: () => void; onText
   return (
     <box flexDirection="column" flexGrow={1}>
       <Panel title="summary">
-        {topRows.map((row, i) => (
-          <InfoRow key={i} items={row} width={innerWidth} />
-        ))}
+        <box flexDirection="row" justifyContent="space-between">
+          <text fg={T.accent} attributes={TextAttributes.BOLD}>
+            {clip(cur, innerWidth)}
+          </text>
+          <text fg={T[syncTone]} attributes={TextAttributes.BOLD}>
+            {clip(syncText, innerWidth)}
+          </text>
+        </box>
+        <KpiGrid items={kpis} width={innerWidth} cols={2} />
       </Panel>
       <Panel title="transactions" grow>
         <box flexGrow={1} flexDirection="column">
@@ -469,24 +467,6 @@ export function SetoranView({ onBack, onTextMode }: { onBack: () => void; onText
         <text fg={T.faint}>{clip(hint, innerWidth)}</text>
         <Msg text={clip(note, innerWidth)} tone={noteTone} />
       </Panel>
-    </box>
-  );
-}
-
-function InfoRow({ items, width }: { items: { label: string; value: string; tone?: Tone }[]; width: number }) {
-  const cell = Math.max(8, Math.floor((width - 1) / 2));
-  return (
-    <box flexDirection="row" gap={1}>
-      {items.map((it, i) => (
-        <box key={i} flexDirection="row" width={cell} gap={1}>
-          <box width={6}>
-            <text fg={T.faint}>{clip(it.label.toUpperCase(), 6)}</text>
-          </box>
-          <text fg={T[it.tone || "text"]} attributes={TextAttributes.BOLD}>
-            {clip(it.value, Math.max(0, cell - 7))}
-          </text>
-        </box>
-      ))}
     </box>
   );
 }

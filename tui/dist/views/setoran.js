@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
 import { T } from "../theme.js";
-import { Field, Msg, Panel } from "../ui.js";
+import { Field, KpiGrid, Msg, Panel } from "../ui.js";
 import { clip, planColumns } from "../layout.js";
 import { reportBranchLabel, reportDateLabel, reportStatusLine } from "../rootinfo.js";
 import * as Gas from "../gas.js";
@@ -197,7 +197,7 @@ export function SetoranView({ onBack, onTextMode }) {
     const cursor = Math.min(Math.max(0, s.cursor), Math.max(0, rows.length - 1));
     const detailRow = s.detailOpen ? rows[cursor] : undefined;
     const detailLines = detailRow ? (detailRow._conflict ? 3 : 1) : 0;
-    const listLines = Math.max(1, Math.floor(dims.height - 14 - detailLines));
+    const listLines = Math.max(1, Math.floor(dims.height - 16 - detailLines));
     const start = Math.max(0, Math.min(cursor - Math.floor(listLines / 2), rows.length - listLines));
     const visible = rows.slice(start, start + listLines);
     const syncText = s.syncing
@@ -322,19 +322,11 @@ export function SetoranView({ onBack, onTextMode }) {
                                 rerender();
                             } }), _jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("box", { width: 8, children: _jsx("text", { fg: s.focus === "pass" ? T.text : T.dim, children: "pass" }) }), _jsx("text", { fg: T.text, children: "•".repeat(s.pass.length) + (s.focus === "pass" ? "█" : "") })] }), _jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("box", { width: 8, children: _jsx("text", { fg: T.faint, children: "remember" }) }), _jsx("text", { fg: s.focus === "remember" ? T.text : T.dim, children: `[${s.remember ? "x" : " "}] on this device (creds.json 600)` })] })] }), _jsx("box", { paddingTop: 1, children: _jsx("text", { fg: T.faint, children: clip("tab move · enter sign in · esc back", width) }) }), _jsx("box", { flexGrow: 1 }), _jsx(Msg, { text: s.msg.t, tone: s.msg.tone })] }));
     }
-    const topRows = [
-        [
-            { label: "period", value: cur, tone: "accent" },
-            { label: "sync", value: syncText, tone: syncTone },
-        ],
-        [
-            { label: "email", value: s.email || "--", tone: "dim" },
-            { label: "tx", value: String(rows.length), tone: "text" },
-        ],
-        [
-            { label: "over", value: rupiah(lebih), tone: lebih ? "ok" : "faint" },
-            { label: "short", value: rupiah(kurang), tone: kurang ? "bad" : "faint" },
-        ],
+    const kpis = [
+        { label: "email", value: s.email || "--" },
+        { label: "tx", value: String(rows.length) },
+        { label: "over", value: rupiah(lebih), tone: (lebih ? "ok" : "faint") },
+        { label: "short", value: rupiah(kurang), tone: (kurang ? "bad" : "faint") },
     ];
     function rowSpec(it) {
         const st = reportStatusLine(it);
@@ -361,11 +353,7 @@ export function SetoranView({ onBack, onTextMode }) {
     const hint = s.detailOpen && detailRow?._conflict
         ? "enter close · l local · g GAS · esc back"
         : "enter diff · r sync · g account · x sign out · esc back";
-    return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsx(Panel, { title: "summary", children: topRows.map((row, i) => (_jsx(InfoRow, { items: row, width: innerWidth }, i))) }), _jsxs(Panel, { title: "transactions", grow: true, children: [_jsxs("box", { flexGrow: 1, flexDirection: "column", children: [!rows.length ? (_jsx("text", { fg: T.faint, children: "no transactions this period." })) : (visible.map((it, i) => renderRow(it, start + i === cursor, start + i))), rows.length > visible.length ? (_jsx("text", { fg: T.faint, children: clip(`... ${rows.length} rows (scroll up/down)`, innerWidth) })) : null] }), _jsx("text", { fg: T.faint, children: clip(hint, innerWidth) }), _jsx(Msg, { text: clip(note, innerWidth), tone: noteTone })] })] }));
-}
-function InfoRow({ items, width }) {
-    const cell = Math.max(8, Math.floor((width - 1) / 2));
-    return (_jsx("box", { flexDirection: "row", gap: 1, children: items.map((it, i) => (_jsxs("box", { flexDirection: "row", width: cell, gap: 1, children: [_jsx("box", { width: 6, children: _jsx("text", { fg: T.faint, children: clip(it.label.toUpperCase(), 6) }) }), _jsx("text", { fg: T[it.tone || "text"], attributes: TextAttributes.BOLD, children: clip(it.value, Math.max(0, cell - 7)) })] }, i))) }));
+    return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsxs(Panel, { title: "summary", children: [_jsxs("box", { flexDirection: "row", justifyContent: "space-between", children: [_jsx("text", { fg: T.accent, attributes: TextAttributes.BOLD, children: clip(cur, innerWidth) }), _jsx("text", { fg: T[syncTone], attributes: TextAttributes.BOLD, children: clip(syncText, innerWidth) })] }), _jsx(KpiGrid, { items: kpis, width: innerWidth, cols: 2 })] }), _jsxs(Panel, { title: "transactions", grow: true, children: [_jsxs("box", { flexGrow: 1, flexDirection: "column", children: [!rows.length ? (_jsx("text", { fg: T.faint, children: "no transactions this period." })) : (visible.map((it, i) => renderRow(it, start + i === cursor, start + i))), rows.length > visible.length ? (_jsx("text", { fg: T.faint, children: clip(`... ${rows.length} rows (scroll up/down)`, innerWidth) })) : null] }), _jsx("text", { fg: T.faint, children: clip(hint, innerWidth) }), _jsx(Msg, { text: clip(note, innerWidth), tone: noteTone })] })] }));
 }
 function fmt3(o) {
     return `K: ${rupiah(o.totalKomputer)} · F: ${rupiah(o.uangFisik)} · S: ${rupiah(o.jumlahSelisih)}`;
