@@ -668,20 +668,20 @@ export function CompView({ onBack, onTextMode }) {
                     : s.scanState === "error"
                         ? "scan failed — press enter to try again"
                         : "ready";
-        return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsxs(Panel, { title: isAdd ? "new computer" : "edit computer", children: [_jsx(Field, { label: "name", value: isAdd ? s.newName : s.edName, focus: s.focus === "name", placeholder: "kasir 1", width: Math.max(12, Math.min(30, innerWidth - 12)), onInput: (v) => {
-                                if (isAdd)
-                                    st.current.newName = v;
-                                else
-                                    st.current.edName = v;
-                            }, onSubmit: () => {
-                                st.current.focus = "base";
-                                rerender();
-                            } }), _jsx(Field, { label: "address", value: isAdd ? s.newBase : s.edBase, focus: s.focus === "base", placeholder: "http://192.168.1.5:8765", width: Math.max(12, Math.min(36, innerWidth - 12)), onInput: (v) => {
-                                if (isAdd)
-                                    st.current.newBase = v;
-                                else
-                                    st.current.edBase = v;
-                            }, onSubmit: () => (isAdd ? saveAdd() : saveEdit()) })] }), _jsxs(Panel, { title: "scan qr", grow: true, children: [_jsx("text", { fg: T.faint, children: clip("point the camera at the QR code on the PC screen", innerWidth) }), _jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("text", { fg: T.accent, children: scanBusy ? SPIN[spinFrame % SPIN.length] : " " }), _jsx("text", { fg: scanBusy ? T.text : T.dim, children: clip(scanStatus, Math.max(0, innerWidth - 2)) })] }), _jsx("box", { flexGrow: 1, flexDirection: "column", children: shownLog.length ? (shownLog.map((ln, i) => (_jsx("text", { fg: T.dim, wrapMode: "none", children: clip(ln || " ", innerWidth) }, i)))) : (_jsx("text", { fg: T.faint, children: clip("press enter on scan qr to start.", innerWidth) })) }), _jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("text", { fg: s.focus === "scan" ? T.accent : T.faint, children: s.focus === "scan" ? ">" : " " }), _jsx("text", { fg: s.focus === "scan" ? T.text : T.dim, attributes: s.focus === "scan" ? TextAttributes.BOLD : undefined, children: scanBusy ? "scanning..." : "[ scan qr ]" })] }), _jsx(Msg, { text: clip(s.msg.t, innerWidth), tone: s.msg.tone }), _jsx("text", { fg: T.faint, children: clip("tab move · enter scan/save · esc cancel/back", innerWidth) })] })] }));
+        return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsx(Panel, { title: isAdd ? "new computer" : "edit computer", children: _jsxs("box", { flexDirection: "column", paddingTop: 1, children: [_jsx(Field, { label: "name", value: isAdd ? s.newName : s.edName, focus: s.focus === "name", placeholder: "kasir 1", width: Math.max(12, Math.min(30, innerWidth - 12)), onInput: (v) => {
+                                    if (isAdd)
+                                        st.current.newName = v;
+                                    else
+                                        st.current.edName = v;
+                                }, onSubmit: () => {
+                                    st.current.focus = "base";
+                                    rerender();
+                                } }), _jsx(Field, { label: "address", value: isAdd ? s.newBase : s.edBase, focus: s.focus === "base", placeholder: "http://192.168.1.5:8765", width: Math.max(12, Math.min(36, innerWidth - 12)), onInput: (v) => {
+                                    if (isAdd)
+                                        st.current.newBase = v;
+                                    else
+                                        st.current.edBase = v;
+                                }, onSubmit: () => (isAdd ? saveAdd() : saveEdit()) }), _jsx("text", { fg: s.focus === "scan" ? T.text : T.dim, attributes: s.focus === "scan" ? TextAttributes.BOLD : undefined, children: scanBusy ? "scanning..." : "[ scan qr ]" })] }) }), _jsxs(Panel, { title: "scan qr", grow: true, children: [_jsx("text", { fg: T.faint, children: clip("point the camera at the QR code on the PC screen", innerWidth) }), _jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("text", { fg: T.accent, children: scanBusy ? SPIN[spinFrame % SPIN.length] : " " }), _jsx("text", { fg: scanBusy ? T.text : T.dim, children: clip(scanStatus, Math.max(0, innerWidth - 2)) })] }), _jsx("box", { flexGrow: 1, flexDirection: "column", children: shownLog.length ? (shownLog.map((ln, i) => (_jsx("text", { fg: T.dim, wrapMode: "none", children: clip(ln || " ", innerWidth) }, i)))) : (_jsx("text", { fg: T.faint, children: clip("press enter on scan qr to start.", innerWidth) })) }), _jsx(Msg, { text: clip(s.msg.t, innerWidth), tone: s.msg.tone }), _jsx("text", { fg: T.faint, children: clip("tab move · enter scan/save · esc cancel/back", innerWidth) })] })] }));
     }
     if (s.page === "log") {
         return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsxs("box", { flexDirection: "row", justifyContent: "space-between", children: [_jsxs("text", { fg: T.text, attributes: TextAttributes.BOLD, children: ["log \u2014 ", Comps.byName(s.logId)] }), _jsx("text", { fg: T.faint, children: "last 200 lines" })] }), _jsx("scrollbox", { flexGrow: 1, width: "100%", children: (s.logLines || ["(empty)"]).map((ln, i) => (_jsx("text", { fg: T.dim, wrapMode: "none", children: ln || " " }, i))) }), _jsx("text", { fg: T.faint, children: clip("esc back", width) })] }));

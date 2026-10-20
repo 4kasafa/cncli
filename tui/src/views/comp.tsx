@@ -712,33 +712,38 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
     return (
       <box flexDirection="column" flexGrow={1}>
         <Panel title={isAdd ? "new computer" : "edit computer"}>
-          <Field
-            label="name"
-            value={isAdd ? s.newName : s.edName}
-            focus={s.focus === "name"}
-            placeholder="kasir 1"
-            width={Math.max(12, Math.min(30, innerWidth - 12))}
-            onInput={(v) => {
-              if (isAdd) st.current.newName = v;
-              else st.current.edName = v;
-            }}
-            onSubmit={() => {
-              st.current.focus = "base";
-              rerender();
-            }}
-          />
-          <Field
-            label="address"
-            value={isAdd ? s.newBase : s.edBase}
-            focus={s.focus === "base"}
-            placeholder="http://192.168.1.5:8765"
-            width={Math.max(12, Math.min(36, innerWidth - 12))}
-            onInput={(v) => {
-              if (isAdd) st.current.newBase = v;
-              else st.current.edBase = v;
-            }}
-            onSubmit={() => (isAdd ? saveAdd() : saveEdit())}
-          />
+          <box flexDirection="column" paddingTop={1}>
+            <Field
+              label="name"
+              value={isAdd ? s.newName : s.edName}
+              focus={s.focus === "name"}
+              placeholder="kasir 1"
+              width={Math.max(12, Math.min(30, innerWidth - 12))}
+              onInput={(v) => {
+                if (isAdd) st.current.newName = v;
+                else st.current.edName = v;
+              }}
+              onSubmit={() => {
+                st.current.focus = "base";
+                rerender();
+              }}
+            />
+            <Field
+              label="address"
+              value={isAdd ? s.newBase : s.edBase}
+              focus={s.focus === "base"}
+              placeholder="http://192.168.1.5:8765"
+              width={Math.max(12, Math.min(36, innerWidth - 12))}
+              onInput={(v) => {
+                if (isAdd) st.current.newBase = v;
+                else st.current.edBase = v;
+              }}
+              onSubmit={() => (isAdd ? saveAdd() : saveEdit())}
+            />
+            <text fg={s.focus === "scan" ? T.text : T.dim} attributes={s.focus === "scan" ? TextAttributes.BOLD : undefined}>
+              {scanBusy ? "scanning..." : "[ scan qr ]"}
+            </text>
+          </box>
         </Panel>
         <Panel title="scan qr" grow>
           <text fg={T.faint}>{clip("point the camera at the QR code on the PC screen", innerWidth)}</text>
@@ -756,12 +761,6 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
             ) : (
               <text fg={T.faint}>{clip("press enter on scan qr to start.", innerWidth)}</text>
             )}
-          </box>
-          <box flexDirection="row" gap={1}>
-            <text fg={s.focus === "scan" ? T.accent : T.faint}>{s.focus === "scan" ? ">" : " "}</text>
-            <text fg={s.focus === "scan" ? T.text : T.dim} attributes={s.focus === "scan" ? TextAttributes.BOLD : undefined}>
-              {scanBusy ? "scanning..." : "[ scan qr ]"}
-            </text>
           </box>
           <Msg text={clip(s.msg.t, innerWidth)} tone={s.msg.tone} />
           <text fg={T.faint}>{clip("tab move · enter scan/save · esc cancel/back", innerWidth)}</text>
