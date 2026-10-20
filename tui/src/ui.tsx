@@ -49,9 +49,25 @@ export function Kpi({ label, value, tone = "text" }: { label: string; value: str
   );
 }
 
-export function Msg({ text, tone = "dim" }: { text: string | null | undefined; tone?: Tone }) {
-  if (!text) return <text> </text>;
-  return <text fg={T[tone]}>{text}</text>;
+export function Msg({
+  text,
+  tone = "dim",
+  lead,
+}: {
+  text: string | null | undefined;
+  tone?: Tone;
+  lead?: string;
+}) {
+  if (!text && !lead) return <text> </text>;
+  if (!lead) return <text fg={T[tone]}>{text}</text>;
+  return (
+    <box flexDirection="row">
+      <text fg={T.accent} attributes={TextAttributes.BOLD}>
+        {lead}
+      </text>
+      <text fg={T[tone]}>{text ?? ""}</text>
+    </box>
+  );
 }
 
 export function Keybar({ items }: { items: [string, string][] }) {

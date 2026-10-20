@@ -385,7 +385,11 @@ export function SetoranView({ onBack, onTextMode }: { onBack: () => void; onText
           <text fg={T.faint}>{clip("tab move · enter sign in · esc back", width)}</text>
         </box>
         <box flexGrow={1} />
-        <Msg text={s.loggingIn ? `${spinChar} ${s.msg.t}` : s.msg.t} tone={s.msg.tone} />
+        <Msg
+          text={s.loggingIn ? clip(s.msg.t, Math.max(0, innerWidth - 2)) : s.msg.t}
+          tone={s.msg.tone}
+          lead={s.loggingIn ? spinChar + " " : undefined}
+        />
       </box>
     );
   }
@@ -454,11 +458,11 @@ export function SetoranView({ onBack, onTextMode }: { onBack: () => void; onText
   }
 
   const note = s.loggingIn
-    ? `${spinChar} ${s.msg.t}`
+    ? s.msg.t
     : s.syncing
-      ? `${spinChar} syncing...`
+      ? "syncing..."
       : [s.msg.t, s.offline ? s.offline + " — r to retry" : ""].filter(Boolean).join(" · ");
-  const noteTone: Tone = s.loggingIn || s.syncing ? "dim" : s.offline ? "warn" : s.msg.tone;
+  const noteTone: Tone = busy ? "dim" : s.offline ? "warn" : s.msg.tone;
   const emailRoom = Math.max(0, innerWidth - syncText.length - 1);
   const hint =
     s.detailOpen && detailRow?._conflict
@@ -489,7 +493,11 @@ export function SetoranView({ onBack, onTextMode }: { onBack: () => void; onText
             <text fg={T.faint}>{clip(`... ${rows.length} rows (scroll up/down)`, innerWidth)}</text>
           ) : null}
         </box>
-        <Msg text={clip(note, innerWidth)} tone={noteTone} />
+        <Msg
+          text={clip(note, Math.max(0, innerWidth - (busy ? 2 : 0)))}
+          tone={noteTone}
+          lead={busy ? spinChar + " " : undefined}
+        />
         <text fg={T.faint}>{clip(hint, innerWidth)}</text>
       </Panel>
     </box>

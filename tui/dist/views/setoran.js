@@ -335,7 +335,7 @@ export function SetoranView({ onBack, onTextMode }) {
                             }, onSubmit: () => {
                                 st.current.focus = "pass";
                                 rerender();
-                            } }), _jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("box", { width: 8, children: _jsx("text", { fg: s.focus === "pass" ? T.text : T.dim, children: "pass" }) }), _jsx("text", { fg: T.text, children: "•".repeat(s.pass.length) + (s.focus === "pass" ? "█" : "") })] }), _jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("box", { width: 8, children: _jsx("text", { fg: T.faint, children: "remember" }) }), _jsx("text", { fg: s.focus === "remember" ? T.text : T.dim, children: `[${s.remember ? "x" : " "}] on this device (creds.json 600)` })] })] }), _jsx("box", { paddingTop: 1, children: _jsx("text", { fg: T.faint, children: clip("tab move · enter sign in · esc back", width) }) }), _jsx("box", { flexGrow: 1 }), _jsx(Msg, { text: s.loggingIn ? `${spinChar} ${s.msg.t}` : s.msg.t, tone: s.msg.tone })] }));
+                            } }), _jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("box", { width: 8, children: _jsx("text", { fg: s.focus === "pass" ? T.text : T.dim, children: "pass" }) }), _jsx("text", { fg: T.text, children: "•".repeat(s.pass.length) + (s.focus === "pass" ? "█" : "") })] }), _jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("box", { width: 8, children: _jsx("text", { fg: T.faint, children: "remember" }) }), _jsx("text", { fg: s.focus === "remember" ? T.text : T.dim, children: `[${s.remember ? "x" : " "}] on this device (creds.json 600)` })] })] }), _jsx("box", { paddingTop: 1, children: _jsx("text", { fg: T.faint, children: clip("tab move · enter sign in · esc back", width) }) }), _jsx("box", { flexGrow: 1 }), _jsx(Msg, { text: s.loggingIn ? clip(s.msg.t, Math.max(0, innerWidth - 2)) : s.msg.t, tone: s.msg.tone, lead: s.loggingIn ? spinChar + " " : undefined })] }));
     }
     const kpis = [
         { label: "period", value: cur },
@@ -364,16 +364,16 @@ export function SetoranView({ onBack, onTextMode }) {
                         }), innerWidth - 2) })) })) : null] }, (it.tanggal || "") + i));
     }
     const note = s.loggingIn
-        ? `${spinChar} ${s.msg.t}`
+        ? s.msg.t
         : s.syncing
-            ? `${spinChar} syncing...`
+            ? "syncing..."
             : [s.msg.t, s.offline ? s.offline + " — r to retry" : ""].filter(Boolean).join(" · ");
-    const noteTone = s.loggingIn || s.syncing ? "dim" : s.offline ? "warn" : s.msg.tone;
+    const noteTone = busy ? "dim" : s.offline ? "warn" : s.msg.tone;
     const emailRoom = Math.max(0, innerWidth - syncText.length - 1);
     const hint = s.detailOpen && detailRow?._conflict
         ? "enter close · l local · g GAS · esc back"
         : "enter diff · r sync · g account · x sign out · esc back";
-    return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsxs(Panel, { title: "summary", children: [_jsxs("box", { flexDirection: "row", justifyContent: "space-between", children: [_jsx("text", { fg: T.accent, attributes: TextAttributes.BOLD, children: clip(s.email || "--", emailRoom) }), _jsx("text", { fg: T[syncTone], attributes: TextAttributes.BOLD, children: clip(syncText, innerWidth) })] }), _jsx(KpiGrid, { items: kpis, width: innerWidth, cols: 2 })] }), _jsxs(Panel, { title: "transactions", grow: true, children: [_jsxs("box", { flexGrow: 1, flexDirection: "column", children: [!rows.length ? (_jsx("text", { fg: T.faint, children: "no transactions this period." })) : (visible.map((it, i) => renderRow(it, start + i === cursor, start + i))), rows.length > visible.length ? (_jsx("text", { fg: T.faint, children: clip(`... ${rows.length} rows (scroll up/down)`, innerWidth) })) : null] }), _jsx(Msg, { text: clip(note, innerWidth), tone: noteTone }), _jsx("text", { fg: T.faint, children: clip(hint, innerWidth) })] })] }));
+    return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsxs(Panel, { title: "summary", children: [_jsxs("box", { flexDirection: "row", justifyContent: "space-between", children: [_jsx("text", { fg: T.accent, attributes: TextAttributes.BOLD, children: clip(s.email || "--", emailRoom) }), _jsx("text", { fg: T[syncTone], attributes: TextAttributes.BOLD, children: clip(syncText, innerWidth) })] }), _jsx(KpiGrid, { items: kpis, width: innerWidth, cols: 2 })] }), _jsxs(Panel, { title: "transactions", grow: true, children: [_jsxs("box", { flexGrow: 1, flexDirection: "column", children: [!rows.length ? (_jsx("text", { fg: T.faint, children: "no transactions this period." })) : (visible.map((it, i) => renderRow(it, start + i === cursor, start + i))), rows.length > visible.length ? (_jsx("text", { fg: T.faint, children: clip(`... ${rows.length} rows (scroll up/down)`, innerWidth) })) : null] }), _jsx(Msg, { text: clip(note, Math.max(0, innerWidth - (busy ? 2 : 0))), tone: noteTone, lead: busy ? spinChar + " " : undefined }), _jsx("text", { fg: T.faint, children: clip(hint, innerWidth) })] })] }));
 }
 function fmt3(o) {
     return `K: ${rupiah(o.totalKomputer)} · F: ${rupiah(o.uangFisik)} · S: ${rupiah(o.jumlahSelisih)}`;

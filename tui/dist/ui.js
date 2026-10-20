@@ -17,10 +17,12 @@ export function Panel({ title, grow, children }) {
 export function Kpi({ label, value, tone = "text" }) {
     return (_jsxs("box", { flexDirection: "column", children: [_jsx("text", { fg: T.faint, children: label }), _jsx("text", { fg: T[tone], attributes: TextAttributes.BOLD, children: value })] }));
 }
-export function Msg({ text, tone = "dim" }) {
-    if (!text)
+export function Msg({ text, tone = "dim", lead, }) {
+    if (!text && !lead)
         return _jsx("text", { children: " " });
-    return _jsx("text", { fg: T[tone], children: text });
+    if (!lead)
+        return _jsx("text", { fg: T[tone], children: text });
+    return (_jsxs("box", { flexDirection: "row", children: [_jsx("text", { fg: T.accent, attributes: TextAttributes.BOLD, children: lead }), _jsx("text", { fg: T[tone], children: text ?? "" })] }));
 }
 export function Keybar({ items }) {
     const parts = [];
