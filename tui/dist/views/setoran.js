@@ -1,10 +1,11 @@
-import { jsx as _jsx, jsxs as _jsxs } from "@opentui/react/jsx-runtime";
+import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "@opentui/react/jsx-runtime";
 import { useEffect, useRef, useState } from "react";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
 import { T } from "../theme.js";
-import { Field, KpiGrid, Msg } from "../ui.js";
-import { clip, formatRow } from "../layout.js";
+import { Field, Msg, Panel } from "../ui.js";
+import { clip, planColumns } from "../layout.js";
+import { reportBranchLabel, reportDateLabel, reportStatusLine } from "../rootinfo.js";
 import * as Gas from "../gas.js";
 import * as Store from "../store.js";
 import * as Conflict from "../conflict.js";
@@ -26,7 +27,7 @@ export function SetoranView({ onBack, onTextMode }) {
         cursor: 0,
         focus: null,
         offline: null,
-        sheetKey: null,
+        detailOpen: false,
         msg: { t: "", tone: "dim" },
     });
     const [, bump] = useState(0);
@@ -141,13 +142,13 @@ export function SetoranView({ onBack, onTextMode }) {
         s.offline = null;
         openLogin();
     }
-    function resolveSheet(useGas) {
+    function resolveDetail(row, useGas) {
         const s = st.current;
-        if (!s.sheetKey)
+        if (!row || !row._conflict)
             return;
-        Conflict.resolve(s.cache, s.sheetKey, useGas);
+        Conflict.resolve(s.cache, Conflict.txKey(row), useGas);
         saveCache();
-        s.sheetKey = null;
+        s.detailOpen = false;
         say(useGas ? "resolved using GAS." : "resolved using local.", "ok");
         rerender();
     }
@@ -172,6 +173,7 @@ export function SetoranView({ onBack, onTextMode }) {
     }, []);
     const s = st.current;
     const width = Math.max(20, dims.width - 2);
+    const innerWidth = Math.max(10, width - 4);
     const cur = Conflict.currentPeriode();
     const rows = s.cache
         .filter((it) => {
@@ -193,27 +195,21 @@ export function SetoranView({ onBack, onTextMode }) {
             lebih += v;
     }
     const cursor = Math.min(Math.max(0, s.cursor), Math.max(0, rows.length - 1));
-    const listLines = Math.max(1, Math.floor((dims.height - 12) / 1));
+    const detailRow = s.detailOpen ? rows[cursor] : undefined;
+    const detailLines = detailRow ? (detailRow._conflict ? 3 : 1) : 0;
+    const listLines = Math.max(1, Math.floor(dims.height - 14 - detailLines));
     const start = Math.max(0, Math.min(cursor - Math.floor(listLines / 2), rows.length - listLines));
     const visible = rows.slice(start, start + listLines);
-    const status = s.syncing
-        ? ["SYNC", "dim"]
-        : Conflict.countConflicts(s.cache)
-            ? [`CONF ${Conflict.countConflicts(s.cache)}`, "warn"]
-            : s.lastError
-                ? ["ERR", "bad"]
-                : s.lastSync
-                    ? [`OK ${s.lastSync}`, "ok"]
-                    : [s.token ? "SIGNED IN" : "--", "faint"];
-    function statusOf(it) {
-        const stv = String(it.statusSelisih || "").toUpperCase();
-        const v = Conflict.toInt(it.jumlahSelisih);
-        if (stv === "KURANG" || v < 0)
-            return { label: "short", tone: "bad" };
-        if (stv === "LEBIH" || v > 0)
-            return { label: "over", tone: "ok" };
-        return { label: "even", tone: "faint" };
-    }
+    const syncText = s.syncing
+        ? "SYNC"
+        : s.lastError
+            ? "ERR"
+            : s.lastSync
+                ? "OK " + s.lastSync.slice(0, 5) + " " + s.lastSync.slice(11, 16)
+                : s.token
+                    ? "SIGNED IN"
+                    : "--";
+    const syncTone = s.syncing ? "dim" : s.lastError ? "bad" : s.lastSync ? "ok" : s.token ? "text" : "faint";
     useKeyboard((key) => {
         if (key.eventType === "release")
             return;
@@ -259,36 +255,28 @@ export function SetoranView({ onBack, onTextMode }) {
             }
             return;
         }
-        if (sx.sheetKey) {
-            if (key.name === "l")
-                resolveSheet(false);
-            else if (key.name === "g")
-                resolveSheet(true);
-            else if (key.name === "escape" || key.name === "h") {
-                sx.sheetKey = null;
-                rerender();
-            }
-            return;
-        }
         switch (key.name) {
             case "up":
             case "k":
+                sx.detailOpen = false;
                 sx.cursor = Math.max(0, cursor - 1);
                 rerender();
                 break;
             case "down":
             case "j":
+                sx.detailOpen = false;
                 sx.cursor = Math.min(Math.max(0, rows.length - 1), cursor + 1);
                 rerender();
                 break;
-            case "return": {
-                const row = rows[cursor];
-                if (row && row._conflict) {
-                    sx.sheetKey = Conflict.txKey(row);
-                    rerender();
-                }
+            case "return":
+                key.preventDefault();
+                sx.detailOpen = !sx.detailOpen;
+                rerender();
                 break;
-            }
+            case "l":
+                if (sx.detailOpen)
+                    resolveDetail(rows[cursor], false);
+                break;
             case "r":
                 if (!sx.token) {
                     say("sign in first.", "bad");
@@ -301,14 +289,27 @@ export function SetoranView({ onBack, onTextMode }) {
                 }
                 break;
             case "g":
-                openLogin();
+                if (sx.detailOpen) {
+                    const row = rows[cursor];
+                    if (row && row._conflict)
+                        resolveDetail(row, true);
+                }
+                else {
+                    openLogin();
+                }
                 break;
             case "x":
                 doLogout();
                 break;
             case "escape":
             case "h":
-                onBack();
+                if (sx.detailOpen) {
+                    sx.detailOpen = false;
+                    rerender();
+                }
+                else {
+                    onBack();
+                }
                 break;
         }
     });
@@ -321,42 +322,51 @@ export function SetoranView({ onBack, onTextMode }) {
                                 rerender();
                             } }), _jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("box", { width: 8, children: _jsx("text", { fg: s.focus === "pass" ? T.text : T.dim, children: "pass" }) }), _jsx("text", { fg: T.text, children: "•".repeat(s.pass.length) + (s.focus === "pass" ? "█" : "") })] }), _jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("box", { width: 8, children: _jsx("text", { fg: T.faint, children: "remember" }) }), _jsx("text", { fg: s.focus === "remember" ? T.text : T.dim, children: `[${s.remember ? "x" : " "}] on this device (creds.json 600)` })] })] }), _jsx("box", { paddingTop: 1, children: _jsx("text", { fg: T.faint, children: clip("tab move · enter sign in · esc back", width) }) }), _jsx("box", { flexGrow: 1 }), _jsx(Msg, { text: s.msg.t, tone: s.msg.tone })] }));
     }
-    const conflictRow = s.sheetKey ? s.cache.find((it) => Conflict.txKey(it) === s.sheetKey) : null;
-    if (conflictRow && conflictRow._conflict) {
-        const k = conflictRow._conflict;
-        return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsxs("text", { fg: T.text, attributes: TextAttributes.BOLD, children: ["diff \u2014 ", conflictRow.tanggal || "--", " / ", conflictRow.shift || "--", " / ", conflictRow.cabang || "--"] }), _jsxs("box", { flexDirection: "column", paddingTop: 1, gap: 1, children: [_jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("box", { width: 7, children: _jsx("text", { fg: T.accent, children: "local" }) }), _jsx("text", { fg: T.dim, children: clip(fmt3(k.lokal), width - 8) })] }), _jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("box", { width: 7, children: _jsx("text", { fg: T.accent, children: "GAS" }) }), _jsx("text", { fg: T.dim, children: clip(fmt3(k.gas), width - 8) })] }), _jsx("text", { fg: T.faint, children: clip("K: computer | F: physical | S: difference", width) })] }), _jsx("box", { flexGrow: 1 }), _jsx(Msg, { text: s.msg.t, tone: s.msg.tone }), _jsx("text", { fg: T.faint, children: clip("l use local · g use GAS · esc back", width) })] }));
-    }
-    const kpis = [
-        { label: "period", value: cur, tone: "accent" },
-        { label: "tx", value: String(rows.length) },
-        { label: "archive", value: String(s.cache.length) },
-        { label: "short", value: rupiah(kurang), tone: (kurang ? "bad" : "faint") },
-        { label: "over", value: rupiah(lebih), tone: (lebih ? "ok" : "faint") },
+    const topRows = [
+        [
+            { label: "period", value: cur, tone: "accent" },
+            { label: "sync", value: syncText, tone: syncTone },
+        ],
+        [
+            { label: "email", value: s.email || "--", tone: "dim" },
+            { label: "tx", value: String(rows.length), tone: "text" },
+        ],
+        [
+            { label: "over", value: rupiah(lebih), tone: lebih ? "ok" : "faint" },
+            { label: "short", value: rupiah(kurang), tone: kurang ? "bad" : "faint" },
+        ],
     ];
     function rowSpec(it) {
-        const stv = statusOf(it);
+        const st = reportStatusLine(it);
         return [
-            { key: "date", min: 10, text: it.tanggal || "--" },
-            { key: "shift", min: 5, text: it.shift || "--" },
-            { key: "status", min: 5, text: stv.label },
-            { key: "s", min: 10, align: "right", text: rupiah(it.jumlahSelisih) },
-            { key: "k", min: 10, align: "right", text: rupiah(it.totalKomputer) },
-            { key: "f", min: 10, align: "right", text: rupiah(it.uangFisik) },
-            { key: "branch", min: 4, flex: 1, text: (it._conflict ? "diff " : "") + (it.cabang || "") },
+            { key: "when", min: 12, text: reportDateLabel(it.tanggal, it.shift) },
+            { key: "status", min: 15, text: st.label === "EVEN" ? "EVEN" : `${st.label} ${rupiah(st.amount)}` },
+            { key: "branch", min: 8, flex: 1, text: reportBranchLabel(it.cabang) },
         ];
     }
-    return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsxs("box", { flexDirection: "row", justifyContent: "space-between", children: [_jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("text", { fg: T.text, attributes: TextAttributes.BOLD, children: "deposits \u2014 GAS" }), _jsx("text", { fg: T[status[1]], children: `[${status[0]}]` })] }), _jsx("text", { fg: T.faint, children: s.autoLogin ? "connecting to GAS..." : s.syncing ? "syncing..." : "r sync" })] }), _jsx(KpiGrid, { items: kpis, width: width }), _jsx("text", { fg: T.dim, children: clip(s.token
-                    ? `signed in as ${s.email} · cashier: ${s.cashier || "-"}`
-                    : s.cache.length
-                        ? `${s.email || "--"} (cache, not signed in)`
-                        : "not signed in — press g", width) }), s.offline ? _jsx("text", { fg: T.warn, children: clip(s.offline + " — r to retry", width) }) : null, _jsxs("box", { flexGrow: 1, flexDirection: "column", paddingTop: 1, children: [!rows.length ? (_jsx("text", { fg: T.faint, children: "no transactions this period." })) : (visible.map((it, i) => {
-                        const idx = start + i;
-                        const on = idx === cursor;
-                        const stv = statusOf(it);
-                        const line = formatRow(Math.max(0, width - 2), rowSpec(it));
-                        return (_jsxs("box", { flexDirection: "row", children: [_jsx("text", { fg: on ? T.accent : T.faint, children: on ? ">" : " " }), _jsx("text", { fg: stv.label === "short" ? T.bad : on ? T.text : T.dim, attributes: on ? TextAttributes.BOLD : undefined, children: " " + line })] }, (it.tanggal || "") + i));
-                    })), rows.length > visible.length ? (_jsx("text", { fg: T.faint, children: clip(`... ${rows.length} rows (scroll up/down)`, width) })) : null] }), _jsx(Msg, { text: s.msg.t, tone: s.msg.tone }), _jsx("text", { fg: T.faint, children: clip("enter diff · r sync · g account · x sign out · esc back", width) })] }));
+    function renderRow(it, on, i) {
+        const specs = rowSpec(it);
+        const widths = planColumns(Math.max(0, innerWidth - 4), specs);
+        const cells = specs.map((sp, ci) => clip(sp.text ?? "", widths[ci]).padEnd(widths[ci]));
+        const st = reportStatusLine(it);
+        const tone = st.label === "SHORT" ? "bad" : st.label === "OVER" ? "ok" : "faint";
+        return (_jsxs("box", { flexDirection: "column", children: [_jsxs("box", { flexDirection: "row", children: [_jsx("text", { fg: on ? T.accent : T.faint, children: on ? ">" : " " }), _jsx("text", { fg: on ? T.text : T.dim, attributes: on ? TextAttributes.BOLD : undefined, children: " " + cells[0] }), _jsx("text", { fg: tone, attributes: on ? TextAttributes.BOLD : undefined, children: " " + cells[1] }), _jsx("text", { fg: on ? T.text : T.dim, children: " " + cells[2] })] }), on && s.detailOpen ? (_jsx("box", { flexDirection: "column", paddingLeft: 2, children: it._conflict ? (_jsxs(_Fragment, { children: [_jsx("text", { fg: T.dim, children: clip("local " + fmt3(it._conflict.lokal), innerWidth - 2) }), _jsx("text", { fg: T.dim, children: clip("GAS   " + fmt3(it._conflict.gas), innerWidth - 2) }), _jsx("text", { fg: T.faint, children: clip("l use local · g use GAS · enter close", innerWidth - 2) })] })) : (_jsx("text", { fg: T.dim, children: clip(fmt3({
+                            totalKomputer: Conflict.toInt(it.totalKomputer),
+                            uangFisik: Conflict.toInt(it.uangFisik),
+                            jumlahSelisih: Conflict.toInt(it.jumlahSelisih),
+                        }), innerWidth - 2) })) })) : null] }, (it.tanggal || "") + i));
+    }
+    const note = [s.msg.t, s.offline ? s.offline + " — r to retry" : ""].filter(Boolean).join(" · ");
+    const noteTone = s.offline ? "warn" : s.msg.tone;
+    const hint = s.detailOpen && detailRow?._conflict
+        ? "enter close · l local · g GAS · esc back"
+        : "enter diff · r sync · g account · x sign out · esc back";
+    return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsx(Panel, { title: "summary", children: topRows.map((row, i) => (_jsx(InfoRow, { items: row, width: innerWidth }, i))) }), _jsxs(Panel, { title: "transactions", grow: true, children: [_jsxs("box", { flexGrow: 1, flexDirection: "column", children: [!rows.length ? (_jsx("text", { fg: T.faint, children: "no transactions this period." })) : (visible.map((it, i) => renderRow(it, start + i === cursor, start + i))), rows.length > visible.length ? (_jsx("text", { fg: T.faint, children: clip(`... ${rows.length} rows (scroll up/down)`, innerWidth) })) : null] }), _jsx("text", { fg: T.faint, children: clip(hint, innerWidth) }), _jsx(Msg, { text: clip(note, innerWidth), tone: noteTone })] })] }));
+}
+function InfoRow({ items, width }) {
+    const cell = Math.max(8, Math.floor((width - 1) / 2));
+    return (_jsx("box", { flexDirection: "row", gap: 1, children: items.map((it, i) => (_jsxs("box", { flexDirection: "row", width: cell, gap: 1, children: [_jsx("box", { width: 6, children: _jsx("text", { fg: T.faint, children: clip(it.label.toUpperCase(), 6) }) }), _jsx("text", { fg: T[it.tone || "text"], attributes: TextAttributes.BOLD, children: clip(it.value, Math.max(0, cell - 7)) })] }, i))) }));
 }
 function fmt3(o) {
-    return `K: ${rupiah(o.totalKomputer)} | F: ${rupiah(o.uangFisik)} | S: ${rupiah(o.jumlahSelisih)}`;
+    return `K: ${rupiah(o.totalKomputer)} · F: ${rupiah(o.uangFisik)} · S: ${rupiah(o.jumlahSelisih)}`;
 }

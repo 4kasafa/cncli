@@ -68,14 +68,38 @@ function syncText(s) {
     const v = String(s == null ? "" : s).trim();
     return v ? v.slice(0, 16) : "-";
 }
-function reportStatus(row) {
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+function shiftTitle(s) {
+    const t = String(s ?? "").trim();
+    if (!t)
+        return "";
+    return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+}
+export function reportDateLabel(tgl, shift) {
+    const d = parseDate(tgl);
+    if (!d)
+        return String(tgl ?? "").trim() || "--";
+    const day = String(d.getDate());
+    const mon = MONTH_SHORT[d.getMonth()] || "--";
+    const sh = shiftTitle(shift);
+    return sh ? `${sh} ${day} ${mon}` : `${day} ${mon}`;
+}
+export function reportBranchLabel(v) {
+    const t = String(v ?? "").trim().toUpperCase();
+    return t || "--";
+}
+export function reportStatusLine(row) {
     const stv = String(row.statusSelisih || "").toUpperCase();
     const v = toInt(row.jumlahSelisih);
     if (stv === "KURANG" || v < 0)
-        return `short ${rupiah(Math.abs(v))}`;
+        return { label: "SHORT", amount: Math.abs(v) };
     if (stv === "LEBIH" || v > 0)
-        return `over ${rupiah(Math.abs(v))}`;
-    return "even";
+        return { label: "OVER", amount: Math.abs(v) };
+    return { label: "EVEN", amount: 0 };
+}
+function reportStatus(row) {
+    const s = reportStatusLine(row);
+    return s.label === "EVEN" ? "even" : `${s.label.toLowerCase()} ${rupiah(s.amount)}`;
 }
 function reportBox(d) {
     const row = d.report;

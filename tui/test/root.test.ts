@@ -1,7 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { capLines, pickLogoFont, rootBudget } from "../dist/layout.js";
-import { baseHost, contentRows, pickLastRow, rootLines, type RootData } from "../dist/rootinfo.js";
+import {
+  baseHost,
+  contentRows,
+  pickLastRow,
+  reportBranchLabel,
+  reportDateLabel,
+  reportStatusLine,
+  rootLines,
+  type RootData,
+} from "../dist/rootinfo.js";
 
 test("pickLogoFont: ambang 46/32", () => {
   assert.equal(pickLogoFont(80), "block");
@@ -129,6 +138,29 @@ test("rootLines: print 2 baris, field kosong jadi '-'", () => {
   assert.deepEqual(full.lines.print, ["Budi · k-01", "A · 1"]);
   const partial = rootLines({ ...base, print: { kasir: "Budi" } });
   assert.deepEqual(partial.lines.print, ["Budi · -", "- · -"]);
+});
+
+test("reportDateLabel: shift title-case, bulan Indonesia, tanpa tahun", () => {
+  assert.equal(reportDateLabel("2026-10-19", "pagi"), "Pagi 19 Okt");
+  assert.equal(reportDateLabel("2/10/2026", "PAGI"), "Pagi 2 Okt");
+  assert.equal(reportDateLabel("2026-08-01", "Malam"), "Malam 1 Agu");
+  assert.equal(reportDateLabel("2026-05-07"), "7 Mei");
+  assert.equal(reportDateLabel("bukan tanggal"), "bukan tanggal");
+  assert.equal(reportDateLabel(null), "--");
+});
+
+test("reportBranchLabel: uppercase, kosong jadi --", () => {
+  assert.equal(reportBranchLabel("sumber rejo"), "SUMBER REJO");
+  assert.equal(reportBranchLabel("  Cabang A  "), "CABANG A");
+  assert.equal(reportBranchLabel(null), "--");
+  assert.equal(reportBranchLabel("   "), "--");
+});
+
+test("reportStatusLine: SHORT/OVER/EVEN dengan amount absolut", () => {
+  assert.deepEqual(reportStatusLine({ statusSelisih: "KURANG", jumlahSelisih: -50000 }), { label: "SHORT", amount: 50000 });
+  assert.deepEqual(reportStatusLine({ statusSelisih: "LEBIH", jumlahSelisih: 20000 }), { label: "OVER", amount: 20000 });
+  assert.deepEqual(reportStatusLine({ statusSelisih: "", jumlahSelisih: 0 }), { label: "EVEN", amount: 0 });
+  assert.deepEqual(reportStatusLine({ statusSelisih: "", jumlahSelisih: -1 }), { label: "SHORT", amount: 1 });
 });
 
 test("rootLines: reports over/even, sync null, tanggal zero-pad", () => {

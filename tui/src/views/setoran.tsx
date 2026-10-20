@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
-import { T } from "../theme.js";
-import { Field, KpiGrid, Msg } from "../ui.js";
-import { clip, formatRow, type ColSpec } from "../layout.js";
+import { T, type Tone } from "../theme.js";
+import { Field, Msg, Panel } from "../ui.js";
+import { clip, planColumns, type ColSpec } from "../layout.js";
+import { reportBranchLabel, reportDateLabel, reportStatusLine } from "../rootinfo.js";
 import * as Gas from "../gas.js";
 import * as Store from "../store.js";
 import * as Conflict from "../conflict.js";
@@ -27,7 +28,7 @@ interface St {
   cursor: number;
   focus: FocusId;
   offline: string | null;
-  sheetKey: string | null;
+  detailOpen: boolean;
   msg: { t: string; tone: "dim" | "ok" | "bad" };
 }
 
@@ -48,7 +49,7 @@ export function SetoranView({ onBack, onTextMode }: { onBack: () => void; onText
     cursor: 0,
     focus: null,
     offline: null,
-    sheetKey: null,
+    detailOpen: false,
     msg: { t: "", tone: "dim" },
   });
   const [, bump] = useState(0);
@@ -163,12 +164,12 @@ export function SetoranView({ onBack, onTextMode }: { onBack: () => void; onText
     openLogin();
   }
 
-  function resolveSheet(useGas: boolean) {
+  function resolveDetail(row: Conflict.GasItem | undefined, useGas: boolean) {
     const s = st.current;
-    if (!s.sheetKey) return;
-    Conflict.resolve(s.cache, s.sheetKey, useGas);
+    if (!row || !row._conflict) return;
+    Conflict.resolve(s.cache, Conflict.txKey(row), useGas);
     saveCache();
-    s.sheetKey = null;
+    s.detailOpen = false;
     say(useGas ? "resolved using GAS." : "resolved using local.", "ok");
     rerender();
   }
@@ -194,6 +195,7 @@ export function SetoranView({ onBack, onTextMode }: { onBack: () => void; onText
 
   const s = st.current;
   const width = Math.max(20, dims.width - 2);
+  const innerWidth = Math.max(10, width - 4);
   const cur = Conflict.currentPeriode();
   const rows = s.cache
     .filter((it) => {
@@ -213,26 +215,21 @@ export function SetoranView({ onBack, onTextMode }: { onBack: () => void; onText
     else if (v > 0) lebih += v;
   }
   const cursor = Math.min(Math.max(0, s.cursor), Math.max(0, rows.length - 1));
-  const listLines = Math.max(1, Math.floor((dims.height - 12) / 1));
+  const detailRow = s.detailOpen ? rows[cursor] : undefined;
+  const detailLines = detailRow ? (detailRow._conflict ? 3 : 1) : 0;
+  const listLines = Math.max(1, Math.floor(dims.height - 14 - detailLines));
   const start = Math.max(0, Math.min(cursor - Math.floor(listLines / 2), rows.length - listLines));
   const visible = rows.slice(start, start + listLines);
-  const status: [string, "dim" | "warn" | "bad" | "ok" | "faint"] = s.syncing
-    ? ["SYNC", "dim"]
-    : Conflict.countConflicts(s.cache)
-      ? [`CONF ${Conflict.countConflicts(s.cache)}`, "warn"]
-      : s.lastError
-        ? ["ERR", "bad"]
-        : s.lastSync
-          ? [`OK ${s.lastSync}`, "ok"]
-          : [s.token ? "SIGNED IN" : "--", "faint"];
-
-  function statusOf(it: Conflict.GasItem): { label: string; tone: "bad" | "ok" | "faint" } {
-    const stv = String(it.statusSelisih || "").toUpperCase();
-    const v = Conflict.toInt(it.jumlahSelisih);
-    if (stv === "KURANG" || v < 0) return { label: "short", tone: "bad" };
-    if (stv === "LEBIH" || v > 0) return { label: "over", tone: "ok" };
-    return { label: "even", tone: "faint" };
-  }
+  const syncText = s.syncing
+    ? "SYNC"
+    : s.lastError
+      ? "ERR"
+      : s.lastSync
+        ? "OK " + s.lastSync.slice(0, 5) + " " + s.lastSync.slice(11, 16)
+        : s.token
+          ? "SIGNED IN"
+          : "--";
+  const syncTone: Tone = s.syncing ? "dim" : s.lastError ? "bad" : s.lastSync ? "ok" : s.token ? "text" : "faint";
 
   useKeyboard((key) => {
     if (key.eventType === "release") return;
@@ -278,34 +275,27 @@ export function SetoranView({ onBack, onTextMode }: { onBack: () => void; onText
       }
       return;
     }
-    if (sx.sheetKey) {
-      if (key.name === "l") resolveSheet(false);
-      else if (key.name === "g") resolveSheet(true);
-      else if (key.name === "escape" || key.name === "h") {
-        sx.sheetKey = null;
-        rerender();
-      }
-      return;
-    }
     switch (key.name) {
       case "up":
       case "k":
+        sx.detailOpen = false;
         sx.cursor = Math.max(0, cursor - 1);
         rerender();
         break;
       case "down":
       case "j":
+        sx.detailOpen = false;
         sx.cursor = Math.min(Math.max(0, rows.length - 1), cursor + 1);
         rerender();
         break;
-      case "return": {
-        const row = rows[cursor];
-        if (row && row._conflict) {
-          sx.sheetKey = Conflict.txKey(row);
-          rerender();
-        }
+      case "return":
+        key.preventDefault();
+        sx.detailOpen = !sx.detailOpen;
+        rerender();
         break;
-      }
+      case "l":
+        if (sx.detailOpen) resolveDetail(rows[cursor], false);
+        break;
       case "r":
         if (!sx.token) {
           say("sign in first.", "bad");
@@ -317,14 +307,24 @@ export function SetoranView({ onBack, onTextMode }: { onBack: () => void; onText
         }
         break;
       case "g":
-        openLogin();
+        if (sx.detailOpen) {
+          const row = rows[cursor];
+          if (row && row._conflict) resolveDetail(row, true);
+        } else {
+          openLogin();
+        }
         break;
       case "x":
         doLogout();
         break;
       case "escape":
       case "h":
-        onBack();
+        if (sx.detailOpen) {
+          sx.detailOpen = false;
+          rerender();
+        } else {
+          onBack();
+        }
         break;
     }
   });
@@ -373,112 +373,124 @@ export function SetoranView({ onBack, onTextMode }: { onBack: () => void; onText
     );
   }
 
-  const conflictRow = s.sheetKey ? s.cache.find((it) => Conflict.txKey(it) === s.sheetKey) : null;
-  if (conflictRow && conflictRow._conflict) {
-    const k = conflictRow._conflict;
+  const topRows: { label: string; value: string; tone?: Tone }[][] = [
+    [
+      { label: "period", value: cur, tone: "accent" },
+      { label: "sync", value: syncText, tone: syncTone },
+    ],
+    [
+      { label: "email", value: s.email || "--", tone: "dim" },
+      { label: "tx", value: String(rows.length), tone: "text" },
+    ],
+    [
+      { label: "over", value: rupiah(lebih), tone: lebih ? "ok" : "faint" },
+      { label: "short", value: rupiah(kurang), tone: kurang ? "bad" : "faint" },
+    ],
+  ];
+
+  function rowSpec(it: Conflict.GasItem): ColSpec[] {
+    const st = reportStatusLine(it);
+    return [
+      { key: "when", min: 12, text: reportDateLabel(it.tanggal, it.shift) },
+      { key: "status", min: 15, text: st.label === "EVEN" ? "EVEN" : `${st.label} ${rupiah(st.amount)}` },
+      { key: "branch", min: 8, flex: 1, text: reportBranchLabel(it.cabang) },
+    ];
+  }
+
+  function renderRow(it: Conflict.GasItem, on: boolean, i: number) {
+    const specs = rowSpec(it);
+    const widths = planColumns(Math.max(0, innerWidth - 4), specs);
+    const cells = specs.map((sp, ci) => clip(sp.text ?? "", widths[ci]).padEnd(widths[ci]));
+    const st = reportStatusLine(it);
+    const tone: Tone = st.label === "SHORT" ? "bad" : st.label === "OVER" ? "ok" : "faint";
     return (
-      <box flexDirection="column" flexGrow={1}>
-        <text fg={T.text} attributes={TextAttributes.BOLD}>
-          diff — {conflictRow.tanggal || "--"} / {conflictRow.shift || "--"} / {conflictRow.cabang || "--"}
-        </text>
-        <box flexDirection="column" paddingTop={1} gap={1}>
-          <box flexDirection="row" gap={1}>
-            <box width={7}>
-              <text fg={T.accent}>local</text>
-            </box>
-            <text fg={T.dim}>{clip(fmt3(k.lokal), width - 8)}</text>
-          </box>
-          <box flexDirection="row" gap={1}>
-            <box width={7}>
-              <text fg={T.accent}>GAS</text>
-            </box>
-            <text fg={T.dim}>{clip(fmt3(k.gas), width - 8)}</text>
-          </box>
-          <text fg={T.faint}>{clip("K: computer | F: physical | S: difference", width)}</text>
+      <box key={(it.tanggal || "") + i} flexDirection="column">
+        <box flexDirection="row">
+          <text fg={on ? T.accent : T.faint}>{on ? ">" : " "}</text>
+          <text fg={on ? T.text : T.dim} attributes={on ? TextAttributes.BOLD : undefined}>
+            {" " + cells[0]}
+          </text>
+          <text fg={tone} attributes={on ? TextAttributes.BOLD : undefined}>
+            {" " + cells[1]}
+          </text>
+          <text fg={on ? T.text : T.dim}>{" " + cells[2]}</text>
         </box>
-        <box flexGrow={1} />
-        <Msg text={s.msg.t} tone={s.msg.tone} />
-        <text fg={T.faint}>{clip("l use local · g use GAS · esc back", width)}</text>
+        {on && s.detailOpen ? (
+          <box flexDirection="column" paddingLeft={2}>
+            {it._conflict ? (
+              <>
+                <text fg={T.dim}>{clip("local " + fmt3(it._conflict.lokal), innerWidth - 2)}</text>
+                <text fg={T.dim}>{clip("GAS   " + fmt3(it._conflict.gas), innerWidth - 2)}</text>
+                <text fg={T.faint}>{clip("l use local · g use GAS · enter close", innerWidth - 2)}</text>
+              </>
+            ) : (
+              <text fg={T.dim}>
+                {clip(
+                  fmt3({
+                    totalKomputer: Conflict.toInt(it.totalKomputer),
+                    uangFisik: Conflict.toInt(it.uangFisik),
+                    jumlahSelisih: Conflict.toInt(it.jumlahSelisih),
+                  }),
+                  innerWidth - 2,
+                )}
+              </text>
+            )}
+          </box>
+        ) : null}
       </box>
     );
   }
 
-  const kpis = [
-    { label: "period", value: cur, tone: "accent" as const },
-    { label: "tx", value: String(rows.length) },
-    { label: "archive", value: String(s.cache.length) },
-    { label: "short", value: rupiah(kurang), tone: (kurang ? "bad" : "faint") as "bad" | "faint" },
-    { label: "over", value: rupiah(lebih), tone: (lebih ? "ok" : "faint") as "ok" | "faint" },
-  ];
-
-  function rowSpec(it: Conflict.GasItem): ColSpec[] {
-    const stv = statusOf(it);
-    return [
-      { key: "date", min: 10, text: it.tanggal || "--" },
-      { key: "shift", min: 5, text: it.shift || "--" },
-      { key: "status", min: 5, text: stv.label },
-      { key: "s", min: 10, align: "right", text: rupiah(it.jumlahSelisih) },
-      { key: "k", min: 10, align: "right", text: rupiah(it.totalKomputer) },
-      { key: "f", min: 10, align: "right", text: rupiah(it.uangFisik) },
-      { key: "branch", min: 4, flex: 1, text: (it._conflict ? "diff " : "") + (it.cabang || "") },
-    ];
-  }
+  const note = [s.msg.t, s.offline ? s.offline + " — r to retry" : ""].filter(Boolean).join(" · ");
+  const noteTone: Tone = s.offline ? "warn" : s.msg.tone;
+  const hint =
+    s.detailOpen && detailRow?._conflict
+      ? "enter close · l local · g GAS · esc back"
+      : "enter diff · r sync · g account · x sign out · esc back";
 
   return (
     <box flexDirection="column" flexGrow={1}>
-      <box flexDirection="row" justifyContent="space-between">
-        <box flexDirection="row" gap={1}>
-          <text fg={T.text} attributes={TextAttributes.BOLD}>
-            deposits — GAS
-          </text>
-          <text fg={T[status[1]]}>{`[${status[0]}]`}</text>
+      <Panel title="summary">
+        {topRows.map((row, i) => (
+          <InfoRow key={i} items={row} width={innerWidth} />
+        ))}
+      </Panel>
+      <Panel title="transactions" grow>
+        <box flexGrow={1} flexDirection="column">
+          {!rows.length ? (
+            <text fg={T.faint}>no transactions this period.</text>
+          ) : (
+            visible.map((it, i) => renderRow(it, start + i === cursor, start + i))
+          )}
+          {rows.length > visible.length ? (
+            <text fg={T.faint}>{clip(`... ${rows.length} rows (scroll up/down)`, innerWidth)}</text>
+          ) : null}
         </box>
-        <text fg={T.faint}>{s.autoLogin ? "connecting to GAS..." : s.syncing ? "syncing..." : "r sync"}</text>
-      </box>
-      <KpiGrid items={kpis} width={width} />
-      <text fg={T.dim}>
-        {clip(
-          s.token
-            ? `signed in as ${s.email} · cashier: ${s.cashier || "-"}`
-            : s.cache.length
-              ? `${s.email || "--"} (cache, not signed in)`
-              : "not signed in — press g",
-          width,
-        )}
-      </text>
-      {s.offline ? <text fg={T.warn}>{clip(s.offline + " — r to retry", width)}</text> : null}
-      <box flexGrow={1} flexDirection="column" paddingTop={1}>
-        {!rows.length ? (
-          <text fg={T.faint}>no transactions this period.</text>
-        ) : (
-          visible.map((it, i) => {
-            const idx = start + i;
-            const on = idx === cursor;
-            const stv = statusOf(it);
-            const line = formatRow(Math.max(0, width - 2), rowSpec(it));
-            return (
-              <box key={(it.tanggal || "") + i} flexDirection="row">
-                <text fg={on ? T.accent : T.faint}>{on ? ">" : " "}</text>
-                <text
-                  fg={stv.label === "short" ? T.bad : on ? T.text : T.dim}
-                  attributes={on ? TextAttributes.BOLD : undefined}
-                >
-                  {" " + line}
-                </text>
-              </box>
-            );
-          })
-        )}
-        {rows.length > visible.length ? (
-          <text fg={T.faint}>{clip(`... ${rows.length} rows (scroll up/down)`, width)}</text>
-        ) : null}
-      </box>
-      <Msg text={s.msg.t} tone={s.msg.tone} />
-      <text fg={T.faint}>{clip("enter diff · r sync · g account · x sign out · esc back", width)}</text>
+        <text fg={T.faint}>{clip(hint, innerWidth)}</text>
+        <Msg text={clip(note, innerWidth)} tone={noteTone} />
+      </Panel>
+    </box>
+  );
+}
+
+function InfoRow({ items, width }: { items: { label: string; value: string; tone?: Tone }[]; width: number }) {
+  const cell = Math.max(8, Math.floor((width - 1) / 2));
+  return (
+    <box flexDirection="row" gap={1}>
+      {items.map((it, i) => (
+        <box key={i} flexDirection="row" width={cell} gap={1}>
+          <box width={6}>
+            <text fg={T.faint}>{clip(it.label.toUpperCase(), 6)}</text>
+          </box>
+          <text fg={T[it.tone || "text"]} attributes={TextAttributes.BOLD}>
+            {clip(it.value, Math.max(0, cell - 7))}
+          </text>
+        </box>
+      ))}
     </box>
   );
 }
 
 function fmt3(o: { totalKomputer: number; uangFisik: number; jumlahSelisih: number }): string {
-  return `K: ${rupiah(o.totalKomputer)} | F: ${rupiah(o.uangFisik)} | S: ${rupiah(o.jumlahSelisih)}`;
+  return `K: ${rupiah(o.totalKomputer)} · F: ${rupiah(o.uangFisik)} · S: ${rupiah(o.jumlahSelisih)}`;
 }
