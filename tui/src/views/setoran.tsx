@@ -400,13 +400,13 @@ export function SetoranView({ onBack, onTextMode }: { onBack: () => void; onText
       <box key={(it.tanggal || "") + i} flexDirection="column">
         <box flexDirection="row">
           <text fg={on ? T.accent : T.faint}>{on ? ">" : " "}</text>
-          <text fg={T[tone]} attributes={on ? TextAttributes.BOLD : undefined}>
+          <text fg={on ? T.text : T[tone]} attributes={on ? TextAttributes.BOLD : undefined}>
             {" " + cells[0]}
           </text>
-          <text fg={T[tone]} attributes={on ? TextAttributes.BOLD : undefined}>
+          <text fg={on ? T.text : T[tone]} attributes={on ? TextAttributes.BOLD : undefined}>
             {" " + cells[1]}
           </text>
-          <text fg={T[tone]} attributes={on ? TextAttributes.BOLD : undefined}>
+          <text fg={on ? T.text : T[tone]} attributes={on ? TextAttributes.BOLD : undefined}>
             {"   " + cells[2]}
           </text>
         </box>
