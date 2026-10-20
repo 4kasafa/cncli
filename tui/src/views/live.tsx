@@ -3,7 +3,7 @@ import { useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
 import { T } from "../theme.js";
 import { KpiGrid, Msg, Panel } from "../ui.js";
-import { clip, formatRow, kpiCols, type ColSpec } from "../layout.js";
+import { clip, formatRow, type ColSpec } from "../layout.js";
 import * as Lan from "../lan.js";
 import * as Store from "../store.js";
 import * as Comps from "../comps.js";
@@ -447,7 +447,7 @@ export function LiveView({ onBack }: { onBack: () => void }) {
   const s = st.current;
   const width = Math.max(20, dims.width - 2);
   const innerWidth = Math.max(10, width - 4);
-  const kpiRows = Math.ceil(4 / kpiCols(innerWidth));
+  const kpiRows = 2;
   const listLines = Math.max(1, dims.height - 10 - 2 * kpiRows);
   const cursor = Math.min(Math.max(0, s.cursor), Math.max(0, s.items.length - 1));
   const start = Math.max(0, Math.min(cursor - Math.floor(listLines / 2), s.items.length - listLines));
@@ -679,9 +679,9 @@ export function LiveView({ onBack }: { onBack: () => void }) {
 
   const kpis = [
     { label: "tx", value: String(s.totals.count) },
+    { label: "total", value: rupiah(s.totals.all) },
     { label: "cash", value: rupiah(s.totals.tunai) },
     { label: "noncash", value: rupiah(s.totals.nontunai) },
-    { label: "total", value: rupiah(s.totals.all) },
   ];
 
   const closeHint = innerWidth < 40 ? "x close" : "x close session";
@@ -697,7 +697,7 @@ export function LiveView({ onBack }: { onBack: () => void }) {
           </box>
           <text fg={T.faint}>{closeHint}</text>
         </box>
-        <KpiGrid items={kpis} width={innerWidth} />
+        <KpiGrid items={kpis} width={innerWidth} cols={2} />
       </Panel>
       <Panel title="transactions" grow>
         <box flexGrow={1} flexDirection="column">
