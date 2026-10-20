@@ -390,10 +390,10 @@ export function SetoranView({ onBack, onTextMode }: { onBack: () => void; onText
 
   function renderRow(it: Conflict.GasItem, on: boolean, i: number) {
     const specs = rowSpec(it);
-    const widths = planColumns(Math.max(0, innerWidth - 4), specs);
+    const widths = planColumns(Math.max(0, innerWidth - 6), specs);
     const cells = specs.map((sp, ci) => clip(sp.text ?? "", widths[ci]).padEnd(widths[ci]));
     const st = reportStatusLine(it);
-    const tone: Tone = st.label === "SHORT" ? "bad" : st.label === "OVER" ? "ok" : "text";
+    const tone: Tone = st.label === "SHORT" ? "bad" : st.label === "OVER" ? "ok" : "dim";
     return (
       <box key={(it.tanggal || "") + i} flexDirection="column">
         <box flexDirection="row">
@@ -405,7 +405,7 @@ export function SetoranView({ onBack, onTextMode }: { onBack: () => void; onText
             {" " + cells[1]}
           </text>
           <text fg={tone} attributes={on ? TextAttributes.BOLD : undefined}>
-            {" " + cells[2]}
+            {"   " + cells[2]}
           </text>
         </box>
         {on && s.detailOpen ? (

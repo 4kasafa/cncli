@@ -337,11 +337,11 @@ export function SetoranView({ onBack, onTextMode }) {
     }
     function renderRow(it, on, i) {
         const specs = rowSpec(it);
-        const widths = planColumns(Math.max(0, innerWidth - 4), specs);
+        const widths = planColumns(Math.max(0, innerWidth - 6), specs);
         const cells = specs.map((sp, ci) => clip(sp.text ?? "", widths[ci]).padEnd(widths[ci]));
         const st = reportStatusLine(it);
-        const tone = st.label === "SHORT" ? "bad" : st.label === "OVER" ? "ok" : "text";
-        return (_jsxs("box", { flexDirection: "column", children: [_jsxs("box", { flexDirection: "row", children: [_jsx("text", { fg: on ? T.accent : T.faint, children: on ? ">" : " " }), _jsx("text", { fg: tone, attributes: on ? TextAttributes.BOLD : undefined, children: " " + cells[0] }), _jsx("text", { fg: tone, attributes: on ? TextAttributes.BOLD : undefined, children: " " + cells[1] }), _jsx("text", { fg: tone, attributes: on ? TextAttributes.BOLD : undefined, children: " " + cells[2] })] }), on && s.detailOpen ? (_jsx("box", { flexDirection: "column", paddingLeft: 2, children: it._conflict ? (_jsxs(_Fragment, { children: [_jsx("text", { fg: T.dim, children: clip("local " + fmt3(it._conflict.lokal), innerWidth - 2) }), _jsx("text", { fg: T.dim, children: clip("GAS   " + fmt3(it._conflict.gas), innerWidth - 2) }), _jsx("text", { fg: T.faint, children: clip("l use local · g use GAS · enter close", innerWidth - 2) })] })) : (_jsx("text", { fg: T.dim, children: clip(fmt3({
+        const tone = st.label === "SHORT" ? "bad" : st.label === "OVER" ? "ok" : "dim";
+        return (_jsxs("box", { flexDirection: "column", children: [_jsxs("box", { flexDirection: "row", children: [_jsx("text", { fg: on ? T.accent : T.faint, children: on ? ">" : " " }), _jsx("text", { fg: tone, attributes: on ? TextAttributes.BOLD : undefined, children: " " + cells[0] }), _jsx("text", { fg: tone, attributes: on ? TextAttributes.BOLD : undefined, children: " " + cells[1] }), _jsx("text", { fg: tone, attributes: on ? TextAttributes.BOLD : undefined, children: "   " + cells[2] })] }), on && s.detailOpen ? (_jsx("box", { flexDirection: "column", paddingLeft: 2, children: it._conflict ? (_jsxs(_Fragment, { children: [_jsx("text", { fg: T.dim, children: clip("local " + fmt3(it._conflict.lokal), innerWidth - 2) }), _jsx("text", { fg: T.dim, children: clip("GAS   " + fmt3(it._conflict.gas), innerWidth - 2) }), _jsx("text", { fg: T.faint, children: clip("l use local · g use GAS · enter close", innerWidth - 2) })] })) : (_jsx("text", { fg: T.dim, children: clip(fmt3({
                             totalKomputer: Conflict.toInt(it.totalKomputer),
                             uangFisik: Conflict.toInt(it.uangFisik),
                             jumlahSelisih: Conflict.toInt(it.jumlahSelisih),
