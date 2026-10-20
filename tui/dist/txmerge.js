@@ -18,11 +18,11 @@ export function noUrutText(it) {
 }
 export function txKind(tunai, nontunai) {
     if (tunai > 0 && nontunai > 0)
-        return "S";
+        return "SPLIT";
     if (tunai > 0)
-        return "C";
+        return "CASH";
     if (nontunai > 0)
-        return "NC";
+        return "NONCASH";
     return "-";
 }
 export function txTime(createdAt) {

@@ -45,10 +45,10 @@ export function noUrutText(it: MergedItem): string {
   return String(it.r.no_urut || "") || "-";
 }
 
-export function txKind(tunai: number, nontunai: number): "C" | "NC" | "S" | "-" {
-  if (tunai > 0 && nontunai > 0) return "S";
-  if (tunai > 0) return "C";
-  if (nontunai > 0) return "NC";
+export function txKind(tunai: number, nontunai: number): "CASH" | "NONCASH" | "SPLIT" | "-" {
+  if (tunai > 0 && nontunai > 0) return "SPLIT";
+  if (tunai > 0) return "CASH";
+  if (nontunai > 0) return "NONCASH";
   return "-";
 }
 

@@ -39,13 +39,13 @@ function txSpec(it, compact) {
         return compact
             ? [
                 { key: "no", min: 6, align: "right", text: no },
-                { key: "amount", min: 11, align: "right", text: "? -" },
+                { key: "amount", min: 17, align: "right", text: "? -" },
                 { key: "whenpc", min: 0, flex: 1, text: `--:--:-- ${it.pc_name || ""}` },
             ]
             : [
                 { key: "no", min: 6, align: "right", text: no },
                 { key: "amount", min: 12, align: "right", text: "?" },
-                { key: "kind", min: 2, text: "-" },
+                { key: "kind", min: 7, text: "-" },
                 { key: "whenpc", min: 0, flex: 1, text: `--:--:-- ${it.pc_name || ""}` },
             ];
     }
@@ -53,14 +53,14 @@ function txSpec(it, compact) {
     if (compact) {
         return [
             { key: "no", min: 6, align: "right", text: no },
-            { key: "amount", min: 11, align: "right", text: `${dots(r.total)} ${TxMerge.txKind(r.tunai, r.nontunai)}` },
+            { key: "amount", min: 17, align: "right", text: `${dots(r.total)} ${TxMerge.txKind(r.tunai, r.nontunai)}` },
             { key: "whenpc", min: 0, flex: 1, text: `${TxMerge.txTime(r.created_at)} ${it.pc_name || ""}`.trim() },
         ];
     }
     return [
         { key: "no", min: 6, align: "right", text: no },
         { key: "amount", min: 12, align: "right", text: rupiah(r.total) },
-        { key: "kind", min: 2, text: TxMerge.txKind(r.tunai, r.nontunai) },
+        { key: "kind", min: 7, text: TxMerge.txKind(r.tunai, r.nontunai) },
         { key: "whenpc", min: 0, flex: 1, text: `${TxMerge.txTime(r.created_at)} ${it.pc_name || ""}`.trim() },
     ];
 }

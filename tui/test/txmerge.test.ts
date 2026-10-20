@@ -47,10 +47,10 @@ test("gap chain: baris HILANG + fill manual duduk tepat di bawah tx penggantinya
   assert.deepEqual(seqs, [5, 4, 3, 2]);
 });
 
-test("txKind: C/NC/S/- dari nominal", () => {
-  assert.equal(txKind(1000, 0), "C");
-  assert.equal(txKind(0, 500), "NC");
-  assert.equal(txKind(1000, 500), "S");
+test("txKind: CASH/NONCASH/SPLIT/- dari nominal", () => {
+  assert.equal(txKind(1000, 0), "CASH");
+  assert.equal(txKind(0, 500), "NONCASH");
+  assert.equal(txKind(1000, 500), "SPLIT");
   assert.equal(txKind(0, 0), "-");
 });
 
