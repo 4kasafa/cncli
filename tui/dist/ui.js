@@ -54,8 +54,8 @@ export function Breadcrumb({ parts }) {
 export function Hints({ items, max = 4 }) {
     return _jsx(Keybar, { items: items.slice(0, max) });
 }
-export function KpiGrid({ items, width }) {
-    const n = kpiCols(width);
+export function KpiGrid({ items, width, cols }) {
+    const n = cols ?? kpiCols(width);
     const cell = Math.max(6, Math.floor((width - (n - 1)) / n));
     const rows = [];
     for (let i = 0; i < items.length; i += n)

@@ -559,6 +559,7 @@ export function PrintView({ onBack, onTextMode }: { onBack: () => void; onTextMo
     },
     { label: "noncash", value: rupiah(s.noncash) },
     { label: "sales", value: rupiah(jual) },
+    { label: "branch", value: s.cabang || "-" },
   ];
 
   function denomCell(d: number, on: boolean) {
@@ -595,8 +596,8 @@ export function PrintView({ onBack, onTextMode }: { onBack: () => void; onTextMo
           </box>
           <text fg={T.faint}>{refreshHint}</text>
         </box>
-        <KpiGrid items={kpis} width={innerWidth} />
-        <text fg={T.dim}>{clip(`${s.kasir || "-"} · ${s.cabang || "-"} · ${(s.shift || "-").toUpperCase()}${s.kasir_id ? " · " + s.kasir_id : ""}   (m edit)`, innerWidth)}</text>
+        <KpiGrid items={kpis} width={innerWidth} cols={3} />
+        <text fg={T.dim}>{clip(`${s.kasir || "-"} · ${(s.shift || "-").toUpperCase()}${s.kasir_id ? " · " + s.kasir_id : ""}   (m edit)`, innerWidth)}</text>
       </Panel>
       <Panel title="denominations" grow>
         <box flexGrow={1} flexDirection="column">
