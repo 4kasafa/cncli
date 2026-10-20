@@ -5,6 +5,7 @@ import {
   baseHost,
   contentRows,
   pickLastRow,
+  reportAmountText,
   reportBranchLabel,
   reportDateLabel,
   reportStatusLine,
@@ -161,6 +162,13 @@ test("reportStatusLine: SHORT/OVER/EVEN dengan amount absolut", () => {
   assert.deepEqual(reportStatusLine({ statusSelisih: "LEBIH", jumlahSelisih: 20000 }), { label: "OVER", amount: 20000 });
   assert.deepEqual(reportStatusLine({ statusSelisih: "", jumlahSelisih: 0 }), { label: "EVEN", amount: 0 });
   assert.deepEqual(reportStatusLine({ statusSelisih: "", jumlahSelisih: -1 }), { label: "SHORT", amount: 1 });
+});
+
+test("reportAmountText: selisih untuk over/short, total komputer untuk even", () => {
+  assert.equal(reportAmountText({ statusSelisih: "LEBIH", jumlahSelisih: 20000, totalKomputer: 500000 }), "Rp 20.000");
+  assert.equal(reportAmountText({ statusSelisih: "KURANG", jumlahSelisih: -30000, totalKomputer: 500000 }), "Rp 30.000");
+  assert.equal(reportAmountText({ statusSelisih: "", jumlahSelisih: 0, totalKomputer: 750000 }), "Rp 750.000");
+  assert.equal(reportAmountText({ statusSelisih: "", jumlahSelisih: 0 }), "Rp 0");
 });
 
 test("rootLines: reports over/even, sync null, tanggal zero-pad", () => {

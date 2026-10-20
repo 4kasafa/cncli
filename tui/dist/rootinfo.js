@@ -97,6 +97,10 @@ export function reportStatusLine(row) {
         return { label: "OVER", amount: Math.abs(v) };
     return { label: "EVEN", amount: 0 };
 }
+export function reportAmountText(row) {
+    const s = reportStatusLine(row);
+    return rupiah(s.label === "EVEN" ? toInt(row.totalKomputer) : s.amount);
+}
 function reportStatus(row) {
     const s = reportStatusLine(row);
     return s.label === "EVEN" ? "even" : `${s.label.toLowerCase()} ${rupiah(s.amount)}`;

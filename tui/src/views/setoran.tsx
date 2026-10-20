@@ -4,7 +4,7 @@ import { TextAttributes } from "@opentui/core";
 import { T, type Tone } from "../theme.js";
 import { Field, KpiGrid, Msg, Panel } from "../ui.js";
 import { clip, planColumns, type ColSpec } from "../layout.js";
-import { reportBranchLabel, reportDateLabel, reportStatusLine } from "../rootinfo.js";
+import { reportAmountText, reportBranchLabel, reportDateLabel, reportStatusLine } from "../rootinfo.js";
 import * as Gas from "../gas.js";
 import * as Store from "../store.js";
 import * as Conflict from "../conflict.js";
@@ -374,17 +374,16 @@ export function SetoranView({ onBack, onTextMode }: { onBack: () => void; onText
   }
 
   const kpis = [
-    { label: "email", value: s.email || "--" },
+    { label: "period", value: cur },
     { label: "tx", value: String(rows.length) },
     { label: "over", value: rupiah(lebih), tone: (lebih ? "ok" : "faint") as Tone },
     { label: "short", value: rupiah(kurang), tone: (kurang ? "bad" : "faint") as Tone },
   ];
 
   function rowSpec(it: Conflict.GasItem): ColSpec[] {
-    const st = reportStatusLine(it);
     return [
       { key: "when", min: 12, text: reportDateLabel(it.tanggal, it.shift) },
-      { key: "status", min: 15, text: st.label === "EVEN" ? "EVEN" : `${st.label} ${rupiah(st.amount)}` },
+      { key: "amount", min: 11, text: reportAmountText(it) },
       { key: "branch", min: 8, flex: 1, text: reportBranchLabel(it.cabang) },
     ];
   }
@@ -394,18 +393,20 @@ export function SetoranView({ onBack, onTextMode }: { onBack: () => void; onText
     const widths = planColumns(Math.max(0, innerWidth - 4), specs);
     const cells = specs.map((sp, ci) => clip(sp.text ?? "", widths[ci]).padEnd(widths[ci]));
     const st = reportStatusLine(it);
-    const tone: Tone = st.label === "SHORT" ? "bad" : st.label === "OVER" ? "ok" : "faint";
+    const tone: Tone = st.label === "SHORT" ? "bad" : st.label === "OVER" ? "ok" : "text";
     return (
       <box key={(it.tanggal || "") + i} flexDirection="column">
         <box flexDirection="row">
           <text fg={on ? T.accent : T.faint}>{on ? ">" : " "}</text>
-          <text fg={on ? T.text : T.dim} attributes={on ? TextAttributes.BOLD : undefined}>
+          <text fg={tone} attributes={on ? TextAttributes.BOLD : undefined}>
             {" " + cells[0]}
           </text>
           <text fg={tone} attributes={on ? TextAttributes.BOLD : undefined}>
             {" " + cells[1]}
           </text>
-          <text fg={on ? T.text : T.dim}>{" " + cells[2]}</text>
+          <text fg={tone} attributes={on ? TextAttributes.BOLD : undefined}>
+            {" " + cells[2]}
+          </text>
         </box>
         {on && s.detailOpen ? (
           <box flexDirection="column" paddingLeft={2}>
@@ -435,6 +436,7 @@ export function SetoranView({ onBack, onTextMode }: { onBack: () => void; onText
 
   const note = [s.msg.t, s.offline ? s.offline + " — r to retry" : ""].filter(Boolean).join(" · ");
   const noteTone: Tone = s.offline ? "warn" : s.msg.tone;
+  const emailRoom = Math.max(0, innerWidth - syncText.length - 1);
   const hint =
     s.detailOpen && detailRow?._conflict
       ? "enter close · l local · g GAS · esc back"
@@ -445,7 +447,7 @@ export function SetoranView({ onBack, onTextMode }: { onBack: () => void; onText
       <Panel title="summary">
         <box flexDirection="row" justifyContent="space-between">
           <text fg={T.accent} attributes={TextAttributes.BOLD}>
-            {clip(cur, innerWidth)}
+            {clip(s.email || "--", emailRoom)}
           </text>
           <text fg={T[syncTone]} attributes={TextAttributes.BOLD}>
             {clip(syncText, innerWidth)}

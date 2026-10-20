@@ -123,6 +123,11 @@ export function reportStatusLine(row: GasItem): { label: "SHORT" | "OVER" | "EVE
   return { label: "EVEN", amount: 0 };
 }
 
+export function reportAmountText(row: GasItem): string {
+  const s = reportStatusLine(row);
+  return rupiah(s.label === "EVEN" ? toInt(row.totalKomputer) : s.amount);
+}
+
 function reportStatus(row: GasItem): string {
   const s = reportStatusLine(row);
   return s.label === "EVEN" ? "even" : `${s.label.toLowerCase()} ${rupiah(s.amount)}`;
