@@ -353,6 +353,8 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
     const my = ++sx.scanSeq;
     sx.scanState = "countdown";
     sx.scanCount = 3;
+    sx.scanLines = [];
+    pushScanLog("point the camera at the QR code on the PC screen");
     pushScanLog("scan starts in 3...");
     rerender();
     let left = 3;
@@ -774,21 +776,16 @@ export function CompView({ onBack, onTextMode }: { onBack: () => void; onTextMod
           </box>
         </Panel>
         <Panel title="scan qr" grow>
-          <text fg={T.faint}>{clip("point the camera at the QR code on the PC screen", innerWidth)}</text>
-          <box flexDirection="row" gap={1}>
-            <text fg={T.accent}>{scanBusy ? spinChar : " "}</text>
-            <text fg={scanBusy ? T.text : T.dim}>{clip(scanStatus, Math.max(0, innerWidth - 2))}</text>
+          <box flexDirection="row">
+            {scanBusy ? <text fg={T.accent}>{spinChar + " "}</text> : null}
+            <text fg={scanBusy ? T.text : T.dim}>{clip(scanStatus, Math.max(0, innerWidth - (scanBusy ? 2 : 0)))}</text>
           </box>
           <box flexGrow={1} flexDirection="column">
-            {shownLog.length ? (
-              shownLog.map((ln, i) => (
-                <text key={i} fg={T.dim} wrapMode="none">
-                  {clip(ln || " ", innerWidth)}
-                </text>
-              ))
-            ) : (
-              <text fg={T.faint}>{clip("press enter on scan qr to start.", innerWidth)}</text>
-            )}
+            {shownLog.map((ln, i) => (
+              <text key={i} fg={T.dim} wrapMode="none">
+                {clip(ln || " ", innerWidth)}
+              </text>
+            ))}
           </box>
           <Msg text={clip(s.msg.t, innerWidth)} tone={s.msg.tone} />
           <text fg={T.faint}>{clip("tab move · enter scan/save · esc cancel/back", innerWidth)}</text>

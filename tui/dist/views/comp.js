@@ -302,6 +302,8 @@ export function CompView({ onBack, onTextMode }) {
         const my = ++sx.scanSeq;
         sx.scanState = "countdown";
         sx.scanCount = 3;
+        sx.scanLines = [];
+        pushScanLog("point the camera at the QR code on the PC screen");
         pushScanLog("scan starts in 3...");
         rerender();
         let left = 3;
@@ -705,7 +707,7 @@ export function CompView({ onBack, onTextMode }) {
                                         st.current.newBase = v;
                                     else
                                         st.current.edBase = v;
-                                }, onSubmit: () => (isAdd ? saveAdd() : saveEdit()) }), _jsx("text", { fg: s.focus === "scan" ? T.text : T.dim, attributes: s.focus === "scan" ? TextAttributes.BOLD : undefined, children: scanBusy ? "scanning..." : "[ scan qr ]" })] }) }), _jsxs(Panel, { title: "scan qr", grow: true, children: [_jsx("text", { fg: T.faint, children: clip("point the camera at the QR code on the PC screen", innerWidth) }), _jsxs("box", { flexDirection: "row", gap: 1, children: [_jsx("text", { fg: T.accent, children: scanBusy ? spinChar : " " }), _jsx("text", { fg: scanBusy ? T.text : T.dim, children: clip(scanStatus, Math.max(0, innerWidth - 2)) })] }), _jsx("box", { flexGrow: 1, flexDirection: "column", children: shownLog.length ? (shownLog.map((ln, i) => (_jsx("text", { fg: T.dim, wrapMode: "none", children: clip(ln || " ", innerWidth) }, i)))) : (_jsx("text", { fg: T.faint, children: clip("press enter on scan qr to start.", innerWidth) })) }), _jsx(Msg, { text: clip(s.msg.t, innerWidth), tone: s.msg.tone }), _jsx("text", { fg: T.faint, children: clip("tab move · enter scan/save · esc cancel/back", innerWidth) })] })] }));
+                                }, onSubmit: () => (isAdd ? saveAdd() : saveEdit()) }), _jsx("text", { fg: s.focus === "scan" ? T.text : T.dim, attributes: s.focus === "scan" ? TextAttributes.BOLD : undefined, children: scanBusy ? "scanning..." : "[ scan qr ]" })] }) }), _jsxs(Panel, { title: "scan qr", grow: true, children: [_jsxs("box", { flexDirection: "row", children: [scanBusy ? _jsx("text", { fg: T.accent, children: spinChar + " " }) : null, _jsx("text", { fg: scanBusy ? T.text : T.dim, children: clip(scanStatus, Math.max(0, innerWidth - (scanBusy ? 2 : 0))) })] }), _jsx("box", { flexGrow: 1, flexDirection: "column", children: shownLog.map((ln, i) => (_jsx("text", { fg: T.dim, wrapMode: "none", children: clip(ln || " ", innerWidth) }, i))) }), _jsx(Msg, { text: clip(s.msg.t, innerWidth), tone: s.msg.tone }), _jsx("text", { fg: T.faint, children: clip("tab move · enter scan/save · esc cancel/back", innerWidth) })] })] }));
     }
     if (s.page === "log") {
         return (_jsxs("box", { flexDirection: "column", flexGrow: 1, children: [_jsxs("box", { flexDirection: "row", justifyContent: "space-between", children: [_jsxs("text", { fg: T.text, attributes: TextAttributes.BOLD, children: ["log \u2014 ", Comps.byName(s.logId)] }), _jsx("text", { fg: T.faint, children: "last 200 lines" })] }), _jsx("scrollbox", { flexGrow: 1, width: "100%", focused: true, children: (s.logLines || ["(empty)"]).map((ln, i) => (_jsx("text", { fg: T.dim, wrapMode: "char", children: ln || " " }, i))) }), _jsx("text", { fg: T.faint, children: clip("up/down scroll · esc back", width) })] }));
