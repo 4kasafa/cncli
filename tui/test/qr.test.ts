@@ -21,3 +21,12 @@ test("qrAddress rejects empty, whitespace, and non-http schemes", () => {
   assert.equal(Qr.qrAddress("ftp://192.168.1.5"), null);
   assert.equal(Qr.qrAddress("javascript:alert(1)"), null);
 });
+
+test("scanQr on a non-Termux host fails before reporting camera progress", async () => {
+  if (Qr.isTermux()) return;
+  const lines: string[] = [];
+  const r = await Qr.scanQr((line) => lines.push(line));
+  assert.equal(r.ok, false);
+  assert.equal(typeof r.error, "string");
+  assert.deepEqual(lines, []);
+});

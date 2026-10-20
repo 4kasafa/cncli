@@ -18,7 +18,7 @@ function shortError(e) {
 function isCode(e, code) {
     return String(e.code) === code;
 }
-export async function scanQr() {
+export async function scanQr(onLog) {
     if (!isTermux())
         return { ok: false, error: "scan needs Termux:API + zbar" };
     const shared = path.join(os.homedir(), "storage", "shared");
@@ -33,6 +33,7 @@ export async function scanQr() {
             /* ponytail: stale temp file is overwritten by the camera */
         }
         try {
+            onLog?.("camera open");
             // ponytail: camera 0, one shot per Enter; add a picker/retry if needed.
             await run("termux-camera-photo", ["-c", "0", photo], { timeout: CAMERA_TIMEOUT_MS });
         }
@@ -46,7 +47,9 @@ export async function scanQr() {
         if (!fs.existsSync(photo) || fs.statSync(photo).size === 0) {
             return { ok: false, error: "camera failed: empty photo (allow camera for Termux:API)" };
         }
+        onLog?.("getting the image");
         try {
+            onLog?.("scanning image");
             const { stdout } = await run("zbarimg", ["--quiet", "--raw", photo], { timeout: ZBAR_TIMEOUT_MS });
             const raw = String(stdout || "").trim();
             if (!raw)

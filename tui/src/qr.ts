@@ -29,7 +29,7 @@ function isCode(e: unknown, code: string): boolean {
   return String((e as { code?: unknown }).code) === code;
 }
 
-export async function scanQr(): Promise<ScanResult> {
+export async function scanQr(onLog?: (line: string) => void): Promise<ScanResult> {
   if (!isTermux()) return { ok: false, error: "scan needs Termux:API + zbar" };
 
   const shared = path.join(os.homedir(), "storage", "shared");
@@ -44,6 +44,7 @@ export async function scanQr(): Promise<ScanResult> {
     }
 
     try {
+      onLog?.("camera open");
       // ponytail: camera 0, one shot per Enter; add a picker/retry if needed.
       await run("termux-camera-photo", ["-c", "0", photo], { timeout: CAMERA_TIMEOUT_MS });
     } catch (e) {
@@ -55,8 +56,10 @@ export async function scanQr(): Promise<ScanResult> {
     if (!fs.existsSync(photo) || fs.statSync(photo).size === 0) {
       return { ok: false, error: "camera failed: empty photo (allow camera for Termux:API)" };
     }
+    onLog?.("getting the image");
 
     try {
+      onLog?.("scanning image");
       const { stdout } = await run("zbarimg", ["--quiet", "--raw", photo], { timeout: ZBAR_TIMEOUT_MS });
       const raw = String(stdout || "").trim();
       if (!raw) return { ok: false, error: "no QR code found" };
